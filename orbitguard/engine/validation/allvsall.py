@@ -238,16 +238,30 @@ def screen_all_vs_all(
     chunk_steps: int = 450,
     dedupe_gap_s: float = 60.0,
     batch_windows: int = 100_000,
+    slice_start_s: float | None = None,
+    slice_stop_s: float | None = None,
 ) -> list[AvAEvent]:
+    """Screen everything against everything.
+
+    slice_start/stop_s allow memory-bounded runs over a sub-interval of the
+    full window: the coarse grid covers the slice (with a one-step margin),
+    and an event is reported by the slice that half-open-contains its TCA —
+    so a sliced run over the whole window reports each event exactly once.
+    `window_s` always bounds TCA validity globally (guide configuration #1).
+    """
     t_start = time.perf_counter()
+    s0 = 0.0 if slice_start_s is None else max(slice_start_s, 0.0)
+    s1 = window_s if slice_stop_s is None else min(slice_stop_s, window_s)
     r_pair = screen_dist_km + vrel_max_kms * coarse_step_s / 2.0
-    n_steps = int(round(window_s / coarse_step_s)) + 1
-    grid = np.arange(n_steps) * coarse_step_s
+    g0 = max(s0 - 2 * coarse_step_s, 0.0)
+    g1 = min(s1 + 2 * coarse_step_s, window_s)
+    n_steps = int(round((g1 - g0) / coarse_step_s)) + 1
+    grid = g0 + np.arange(n_steps) * coarse_step_s
 
     keys, s_lo, s_hi = _stage_b(records, grid, r_pair, chunk_steps)
     log.info(
-        "stage B: %d windows over %d pairs, r_pair=%.1f km, %.1f s",
-        len(keys), len(np.unique(keys)) if len(keys) else 0, r_pair,
+        "stage B [%.0f-%.0f s]: %d windows over %d pairs, r_pair=%.1f km, %.1f s",
+        s0, s1, len(keys), len(np.unique(keys)) if len(keys) else 0, r_pair,
         time.perf_counter() - t_start,
     )
 
@@ -262,6 +276,14 @@ def screen_all_vs_all(
                 coarse_step_s=coarse_step_s, fine_step_s=fine_step_s,
             )
         )
+
+    # half-open slice ownership (except the final slice, which owns its end)
+    if slice_start_s is not None or slice_stop_s is not None:
+        end_inclusive = s1 >= window_s
+        events = [
+            e for e in events
+            if (e.tca_s >= s0) and (e.tca_s < s1 or (end_inclusive and e.tca_s <= s1))
+        ]
 
     events = _dedupe(events, dedupe_gap_s)
     log.info(

@@ -98,6 +98,9 @@ def test_validator_rejects_foreign_numbers():
     ev = _event(2.5)
     a = assess_event(ev, hbr_km=0.02, cfg=CFG)
     record = build_evidence(ev, a, asset, obj, ScreeningConfig())
+    # pin the wall-clock-derived fields so the test is deterministic
+    record["asset"]["gp_age_hours"] = 10.0
+    record["object"]["gp_age_hours"] = 12.0
     ok, offending = validate_narration(
         "The satellites pass within 47.3 km of each other.", record
     )
