@@ -309,6 +309,42 @@ pre.raw {
   border-radius: 8px; padding: 10px 12px; margin-top: 8px;
 }
 
+/* globe interactivity */
+.hover-tip {
+  display: none; position: absolute; z-index: 20; pointer-events: none;
+  background: #16243f; border: 1px solid var(--accent); border-radius: 6px;
+  padding: 3px 9px; font-size: 11.5px; font-family: var(--mono); color: var(--text);
+  white-space: nowrap;
+}
+.sep-readout {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 15;
+  background: rgba(11, 20, 38, 0.94); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 16px; font-family: var(--mono); font-size: 13px; color: var(--text);
+  min-width: 320px; text-align: center;
+}
+.sat-panel {
+  position: absolute; right: 12px; top: 12px; z-index: 18; width: 250px;
+  background: rgba(11, 20, 38, 0.96); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(4px);
+}
+.sat-head { display: flex; justify-content: space-between; align-items: baseline; }
+.sat-head b { font-size: 13px; color: var(--accent); }
+.sat-close {
+  background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px;
+}
+.sat-rows {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  font-size: 11.5px; margin: 10px 0;
+}
+.sat-rows span { color: var(--muted); }
+.sat-rows b { font-family: var(--mono); font-weight: 500; text-align: right; }
+.sat-follow { width: 100%; padding: 7px 0; font-size: 12.5px; }
+
+.sim-chip {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px;
+  background: #7c5cff; color: #fff; vertical-align: 2px; font-family: var(--mono);
+}
+
 @media (max-width: 1100px) {
   .inspector { grid-template-columns: 1fr; }
   .tiles { grid-template-columns: repeat(2, 1fr); }

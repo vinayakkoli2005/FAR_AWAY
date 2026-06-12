@@ -15,6 +15,7 @@ export interface Probability {
   chan_crosscheck: number | null;
   hard_body_radius_m: number;
   hbr_source?: string;
+  ellipse?: { sigma_major_m: number; sigma_minor_m: number; theta_deg: number } | null;
 }
 
 export interface PartyInfo {
@@ -30,6 +31,7 @@ export interface Evidence {
   verdict: "DODGE" | "WATCH" | "WAIT";
   escalate: boolean;
   data_grade: string;
+  simulated?: boolean;
   asset: PartyInfo;
   object: PartyInfo;
   tca_utc: string;

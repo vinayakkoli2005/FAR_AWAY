@@ -40,6 +40,11 @@ export default function EventCard({ ev, locatable = true }: { ev: Evidence; loca
       <div className="head">
         <span>
           <span className={`verdict ${ev.verdict}`}>{ev.verdict}</span>
+          {ev.simulated && (
+            <span className="sim-chip tip" data-tip="Training scenario with simulated CDM covariance — probability and verdict computed by the real pipeline">
+              SIM
+            </span>
+          )}
           {ev.escalate && (
             <span className="esc tip" data-tip="TLE data can prove safety, never danger — ask the object's owner or 18 SDS for covariance-grade data before considering a maneuver">
               REQUEST CDM

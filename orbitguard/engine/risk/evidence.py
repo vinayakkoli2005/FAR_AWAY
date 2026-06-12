@@ -25,6 +25,7 @@ def build_evidence(
     obj: CatalogObject,
     cfg: ScreeningConfig,
     hbr_source: str = "default",
+    simulated: bool = False,
 ) -> dict:
     r, i, c = event.miss_ric_km
     return {
@@ -32,6 +33,7 @@ def build_evidence(
         "verdict": assessment.verdict.value,
         "escalate": assessment.escalate,
         "data_grade": assessment.grade.value,
+        "simulated": simulated,
         "asset": {
             "norad_id": asset.norad_id,
             "name": asset.name,
@@ -60,6 +62,15 @@ def build_evidence(
             "chan_crosscheck": _sig3(assessment.pc_chan_crosscheck),
             "hard_body_radius_m": round(assessment.hbr_km * 1000.0, 1),
             "hbr_source": hbr_source,
+            "ellipse": (
+                {
+                    "sigma_major_m": round(assessment.ellipse[0] * 1000.0, 1),
+                    "sigma_minor_m": round(assessment.ellipse[1] * 1000.0, 1),
+                    "theta_deg": round(assessment.ellipse[2], 1),
+                }
+                if assessment.ellipse
+                else None
+            ),
         },
         "policy": {
             "rationale": assessment.rationale,

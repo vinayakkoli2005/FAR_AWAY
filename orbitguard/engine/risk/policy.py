@@ -45,6 +45,9 @@ class RiskAssessment:
     pc_max: float | None          # worst-case bound (TLE-grade)
     hbr_km: float
     rationale: str
+    # encounter-plane 1-sigma ellipse of the combined covariance, CDM-grade
+    # only: (sigma_major_km, sigma_minor_km, theta_deg vs the miss-vector axis)
+    ellipse: tuple[float, float, float] | None = None
 
     def headline_pc(self) -> float:
         return self.pc if self.pc is not None else (self.pc_max or 0.0)
@@ -68,6 +71,12 @@ def assess_event(
         pc = pc_foster(m2, cp, hbr)
         pc_x = pc_chan(m2, cp, hbr)
         grade = DataGrade.CDM
+        w, vecs = np.linalg.eigh(cp)  # ascending eigenvalues
+        ellipse = (
+            float(np.sqrt(max(w[1], 0.0))),
+            float(np.sqrt(max(w[0], 0.0))),
+            float(np.degrees(np.arctan2(vecs[1, 1], vecs[0, 1]))),
+        )
         if low_vrel:
             verdict, esc = Verdict.WATCH, False
             why = (
@@ -86,7 +95,7 @@ def assess_event(
         return RiskAssessment(
             verdict=verdict, grade=grade, escalate=esc, low_vrel_flag=low_vrel,
             pc=pc, pc_method="Foster-1992 2D quadrature", pc_chan_crosscheck=pc_x,
-            pc_max=None, hbr_km=hbr, rationale=why,
+            pc_max=None, hbr_km=hbr, rationale=why, ellipse=ellipse,
         )
 
     # TLE-grade: no covariance — worst-case bound only.

@@ -10,7 +10,7 @@ const STEPS = [
   {
     icon: "🌍",
     title: "1 · The sky right now",
-    text: "The globe shows your satellites (cyan, with orbit trails) flying through the full public catalog — every grey dot is a real tracked object, moving on real orbital data. Drag to rotate, scroll to zoom, and use the timeline at the bottom to fast-forward.",
+    text: "The globe shows your satellites (cyan, with orbit trails) flying through the full public catalog — every grey dot is a real tracked object on real orbital data. Hover any dot to identify it; click it for its orbit details and a Follow button that locks the camera onto it. Drag to rotate, scroll to zoom, timeline to fast-forward.",
   },
   {
     icon: "🔻",
@@ -25,7 +25,7 @@ const STEPS = [
   {
     icon: "🔍",
     title: "4 · Trust, but verify",
-    text: "Click any card to open the Encounter Inspector: the exact geometry, the worst-case probability math, a plain-English explanation — and a button showing the raw evidence JSON, because every number is auditable. The Scorecard page shows how the engine scores against the official U.S. TraCSS answer key.",
+    text: "Click any card to open the Encounter Inspector: a live flyby simulation around the moment of closest approach with a real-time separation readout, the exact encounter geometry, the probability math, a plain-English explanation — and the raw evidence JSON, because every number is auditable. The purple SIM event is a training scenario exercising the maneuver-alert path with CDM-grade covariance.",
   },
 ];
 

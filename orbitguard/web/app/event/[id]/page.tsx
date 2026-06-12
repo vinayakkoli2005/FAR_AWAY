@@ -75,6 +75,11 @@ export default function Inspector({ params }: { params: { id: string } }) {
           <h3>
             <span className={`verdict ${ev.verdict}`}>{ev.verdict}</span>
             {ev.escalate && <span className="esc">REQUEST CDM</span>}
+            {ev.simulated && (
+              <span className="sim-chip tip" data-tip="Training scenario: simulated geometry and CDM covariance — but the probability, ellipse and verdict come from the real Foster/Chan pipeline">
+                SIMULATED
+              </span>
+            )}
             &nbsp;· {ev.asset.name} ✕ {ev.object.name}
           </h3>
           <div style={{ position: "absolute", inset: "52px 16px 16px" }}>
@@ -84,6 +89,12 @@ export default function Inspector({ params }: { params: { id: string } }) {
                 events={[ev]}
                 assetIds={[ev.asset.norad_id]}
                 focusEventId={ev.event_id}
+                encounter={{
+                  tcaIso: ev.tca_utc,
+                  assetId: ev.asset.norad_id,
+                  objectId: ev.object.norad_id,
+                  missKm: ev.miss_distance_km,
+                }}
               />
             )}
           </div>

@@ -22,6 +22,12 @@ class MissRIC(BaseModel):
     cross_track: float
 
 
+class EllipseInfo(BaseModel):
+    sigma_major_m: float
+    sigma_minor_m: float
+    theta_deg: float
+
+
 class Probability(BaseModel):
     pc: float | None = None
     pc_max: float | None = None
@@ -29,6 +35,7 @@ class Probability(BaseModel):
     chan_crosscheck: float | None = None
     hard_body_radius_m: float
     hbr_source: str = "default"
+    ellipse: EllipseInfo | None = None
 
 
 class PolicyInfo(BaseModel):
@@ -48,6 +55,7 @@ class Evidence(BaseModel):
     verdict: str
     escalate: bool
     data_grade: str
+    simulated: bool = False
     asset: AssetInfo
     object: ObjectInfo
     tca_utc: str
