@@ -165,7 +165,7 @@ story += [
     metric_tiles([
         (rec_str, f"RECALL vs {n_key}-EVENT FEDERAL ANSWER KEY"),
         (prec_str, "PRECISION"),
-        ("48", "AUTOMATED TESTS (CI)"),
+        ("53", "AUTOMATED TESTS (CI)"),
         ("11.6 s", "ISS vs 15,697 OBJECTS, 7 DAYS"),
     ]),
     Spacer(1, 1.0 * cm),
@@ -327,7 +327,7 @@ story += [
 story += [
     heading("5 · VERIFICATION — MEASURED, NOT ASSERTED"),
     Spacer(1, 8),
-    P("<b>Ring 1 — continuous (48 tests, every commit).</b>"),
+    P("<b>Ring 1 — continuous (53 tests, every commit).</b>"),
     Spacer(1, 4),
     grid_table(
         ["Claim", "Independent referee"],

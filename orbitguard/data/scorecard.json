@@ -1,0 +1,27 @@
+{
+ "status": "complete",
+ "dataset": "TraCSS Dataset for Conjunction Assessment Verification (CC0), spherical 10 km / DefaultHBR answer key",
+ "screening_window": "2025-01-01T12:00:00+00:00 +168h",
+ "recall": 0.99727,
+ "precision": 0.996,
+ "f1": 0.99664,
+ "events_key": 913330,
+ "events_found": 914495,
+ "events_matched": 910841,
+ "tca_rms_ms": 61.34,
+ "tca_p95_ms": 0.05,
+ "miss_rms_m": 0.14,
+ "miss_p95_m": 0.28,
+ "runtime_s": 13216.2,
+ "n_ephemerides": 26793,
+ "hardware": "Apple Silicon laptop, 8 GB RAM (time-sliced all-vs-all)",
+ "git_sha": "3f66f15",
+ "methodology": [
+  "Stage B+C screening run directly on the provided OCM ephemerides (no SGP4 in the loop)",
+  "6-point Lagrange interpolation on position, analytic velocity derivative",
+  "All-vs-all, usable windows honored, OD epoch < 14 d, same-designator pairs excluded",
+  "Matched to the spherical DefaultHBR key on (unordered pair, |dTCA| <= 5 s)",
+  "Duplicates count against precision; each key row claimable once"
+ ],
+ "disclaimer": "Dataset is for algorithm testing, not operational certification (per the Office of Space Commerce)."
+}
