@@ -60,27 +60,27 @@ export default function EncounterPlane({ ev }: { ev: Evidence }) {
         )}
 
         {/* secondary object at origin */}
-        <circle cx={cx} cy={cy} r={4} fill="#ffb347" />
-        <text x={cx - 8} y={cy + 18} fill="#ffb347" fontSize={11} fontFamily="monospace"
+        <circle cx={cx} cy={cy} r={4} fill="#9fb0cc" />
+        <text x={cx - 8} y={cy + 18} fill="#9fb0cc" fontSize={11} fontFamily="monospace"
           textAnchor="end">{ev.object.name}</text>
 
         {/* miss vector */}
-        <line x1={cx} y1={cy} x2={missX} y2={cy} stroke="#43d2ff" strokeWidth={1.6}
+        <line x1={cx} y1={cy} x2={missX} y2={cy} stroke="#4da3ff" strokeWidth={1.6}
           markerEnd="url(#arrow)" />
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
             markerHeight="7" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#43d2ff" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4da3ff" />
           </marker>
         </defs>
-        <text x={(cx + missX) / 2} y={cy - 8} fill="#43d2ff" fontSize={11}
+        <text x={(cx + missX) / 2} y={cy - 8} fill="#4da3ff" fontSize={11}
           fontFamily="monospace" textAnchor="middle">d = {d.toFixed(3)} km</text>
 
         {/* hard-body circle at the asset position */}
         <circle cx={missX} cy={cy} r={hbrPx} fill="rgba(255,77,77,0.25)"
           stroke="#ff4d4d" strokeWidth={1.5} />
-        <circle cx={missX} cy={cy} r={3.4} fill="#43d2ff" />
-        <text x={missX + 10} y={cy + 18} fill="#43d2ff" fontSize={11}
+        <circle cx={missX} cy={cy} r={3.4} fill="#4da3ff" />
+        <text x={missX + 10} y={cy + 18} fill="#4da3ff" fontSize={11}
           fontFamily="monospace">{ev.asset.name}</text>
         <text x={missX + 10} y={cy + 32} fill="#ff4d4d" fontSize={10.5}
           fontFamily="monospace">HBR {ev.probability.hard_body_radius_m.toFixed(0)} m</text>

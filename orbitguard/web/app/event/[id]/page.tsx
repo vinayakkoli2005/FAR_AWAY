@@ -1,10 +1,12 @@
 "use client";
 
-// Encounter Inspector: flyby view + encounter-plane plot + evidence card +
-// grounded explanation with raw-evidence toggle (transparency as UI).
+// Encounter Inspector: a full-screen cinematic stage (the simulation deserves
+// the whole viewport), with the analysis — encounter plane, evidence record,
+// grounded explanation — laid out full-width below. A pulsing prompt on the
+// stage makes sure nobody misses the scroll.
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import EncounterPlane from "@/components/EncounterPlane";
 import {
   CatalogEntry,
@@ -24,6 +26,7 @@ export default function Inspector({ params }: { params: { id: string } }) {
   const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
   const [showRaw, setShowRaw] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const detailsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -68,87 +71,107 @@ export default function Inspector({ params }: { params: { id: string } }) {
     ["Screening volume", `${ev.screening.distance_km} km / ${ev.screening.window_days} d`],
   ];
 
+  const scrollToDetails = () =>
+    detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <main>
-      <div className="inspector">
-        <section className="panel" style={{ position: "relative", minHeight: 460 }}>
-          <h3>
-            <span className={`verdict ${ev.verdict}`}>{ev.verdict}</span>
-            {ev.escalate && <span className="esc">REQUEST CDM</span>}
-            {ev.simulated && (
-              <span className="sim-chip tip" data-tip="Training scenario: simulated geometry and CDM covariance — but the probability, ellipse and verdict come from the real Foster/Chan pipeline">
-                SIMULATED
-              </span>
-            )}
-            &nbsp;· {ev.asset.name} ✕ {ev.object.name}
-          </h3>
-          <div style={{ position: "absolute", inset: "52px 16px 16px" }}>
-            {catalog && (
-              <Globe
-                catalog={catalog}
-                events={[ev]}
-                assetIds={[ev.asset.norad_id]}
-                focusEventId={ev.event_id}
-                encounter={{
-                  tcaIso: ev.tca_utc,
-                  assetId: ev.asset.norad_id,
-                  objectId: ev.object.norad_id,
-                  missKm: ev.miss_distance_km,
-                }}
-              />
-            )}
-          </div>
-        </section>
+      {/* ---- full-viewport cinematic stage ---- */}
+      <section className="stage">
+        {catalog && (
+          <Globe
+            catalog={catalog}
+            events={[ev]}
+            assetIds={[ev.asset.norad_id]}
+            focusEventId={ev.event_id}
+            encounter={{
+              tcaIso: ev.tca_utc,
+              assetId: ev.asset.norad_id,
+              objectId: ev.object.norad_id,
+              missKm: ev.miss_distance_km,
+            }}
+          />
+        )}
+        <div className="stage-head">
+          <span className={`verdict ${ev.verdict}`}>{ev.verdict}</span>
+          {ev.escalate && <span className="esc">REQUEST CDM</span>}
+          {ev.simulated && (
+            <span className="sim-chip tip" data-tip="Training scenario: simulated geometry and CDM covariance — but the probability, ellipse and verdict come from the real Foster/Chan pipeline">
+              SIMULATED
+            </span>
+          )}
+          <span className="pair-title">
+            {ev.asset.name} ✕ {ev.object.name}
+          </span>
+          <span className="miss-pill">
+            miss {ev.miss_distance_km.toFixed(3)} km · {ev.probability.pc != null ? "Pc" : "Pc≤"}{" "}
+            {pc?.toExponential(2)}
+          </span>
+        </div>
+        <button className="detail-fab" onClick={scrollToDetails}>
+          📊 View detailed analysis ↓
+        </button>
+      </section>
 
-        <section className="panel">
-          <div className={`verdict-banner ${ev.verdict}`}>
-            <b>{ev.verdict}</b> —{" "}
-            {ev.verdict === "DODGE"
-              ? "collision probability is above NASA's maneuver-consideration threshold."
-              : ev.verdict === "WAIT"
-              ? "provably safe: no error model consistent with this geometry exceeds the concern threshold."
-              : ev.escalate
-              ? "risk cannot be ruled out at this distance, but TLE data can never justify a maneuver — request covariance-grade data (CDM)."
-              : "inconclusive at current data quality — re-screen when fresh orbit data arrives."}
-          </div>
-          <h3>ENCOUNTER PLANE</h3>
-          <EncounterPlane ev={ev} />
-          <details className="howto">
-            <summary>How to read this figure</summary>
-            <p>
-              You are looking along the relative velocity vector — the plane in which the two
-              objects actually pass each other. The <b style={{ color: "#ffb347" }}>amber dot</b>{" "}
-              is the other object; the <b style={{ color: "#43d2ff" }}>cyan arrow</b> is the miss
-              vector to your satellite at closest approach. The small{" "}
-              <b style={{ color: "#ff4d4d" }}>red circle</b> is the combined hard-body size —
-              physical contact means being inside it. The dashed circles show the{" "}
-              <i>worst-case</i> position-error distribution: the one an adversarial universe
-              would pick to maximize collision probability. Even under that distribution, Pc
-              cannot exceed the bound shown — that is what lets OrbitGuard prove safety from
-              public data alone.
-            </p>
-          </details>
-          <h3 style={{ marginTop: 18 }}>EVIDENCE</h3>
-          <div className="evidence-grid">
-            {rows.map(([k, v]) => (
-              <div key={k} style={{ display: "contents" }}>
-                <span className="k">{k}</span>
-                <span className="v">{v}</span>
-              </div>
-            ))}
+      {/* ---- full-width analysis below the stage ---- */}
+      <section className="details" ref={detailsRef}>
+        <div className={`verdict-banner ${ev.verdict}`}>
+          <b>{ev.verdict}</b> —{" "}
+          {ev.verdict === "DODGE"
+            ? "collision probability is above NASA's maneuver-consideration threshold."
+            : ev.verdict === "WAIT"
+            ? "provably safe: no error model consistent with this geometry exceeds the concern threshold."
+            : ev.escalate
+            ? "risk cannot be ruled out at this distance, but TLE data can never justify a maneuver — request covariance-grade data (CDM)."
+            : "inconclusive at current data quality — re-screen when fresh orbit data arrives."}
+        </div>
+
+        <div className="details-grid">
+          <div className="panel">
+            <h3>ENCOUNTER PLANE</h3>
+            <EncounterPlane ev={ev} />
+            <details className="howto">
+              <summary>How to read this figure</summary>
+              <p>
+                You are looking along the relative velocity vector — the plane in which the two
+                objects actually pass each other. The <b style={{ color: "#9fb0cc" }}>grey dot</b>{" "}
+                is the other object; the <b style={{ color: "#4da3ff" }}>blue arrow</b> is the miss
+                vector to your satellite at closest approach. The small{" "}
+                <b style={{ color: "#ff4d4d" }}>red circle</b> is the combined hard-body size —
+                physical contact means being inside it. The dashed or elliptical contours show the
+                position-error distribution used by the probability integral.
+              </p>
+            </details>
           </div>
 
-          <h3 style={{ marginTop: 18 }}>
-            EXPLANATION{" "}
-            {exp && <span className="source-tag">[{exp.source}{exp.model ? ` · ${exp.model}` : ""}]</span>}
-          </h3>
-          <div className="explain-box">{exp ? exp.text : "generating…"}</div>
-          <button className="raw-toggle" onClick={() => setShowRaw(!showRaw)}>
-            {showRaw ? "hide" : "show"} raw evidence record
-          </button>
-          {showRaw && <pre className="raw">{JSON.stringify(ev, null, 2)}</pre>}
-        </section>
-      </div>
+          <div className="panel">
+            <h3>EVIDENCE</h3>
+            <div className="evidence-grid">
+              {rows.map(([k, v]) => (
+                <div key={k} style={{ display: "contents" }}>
+                  <span className="k">{k}</span>
+                  <span className="v">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            <h3 style={{ marginTop: 18 }}>
+              EXPLANATION{" "}
+              {exp && (
+                <span className="source-tag">
+                  [{exp.source}
+                  {exp.model ? ` · ${exp.model}` : ""}]
+                </span>
+              )}
+            </h3>
+            <div className="explain-box">{exp ? exp.text : "generating…"}</div>
+            <button className="raw-toggle" onClick={() => setShowRaw(!showRaw)}>
+              {showRaw ? "hide" : "show"} raw evidence record
+            </button>
+            {showRaw && <pre className="raw">{JSON.stringify(ev, null, 2)}</pre>}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

@@ -48,6 +48,7 @@ export default function MissionControl() {
   const [catalog, setCatalog] = useState<CatalogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState<number | null>(null);
+  const [verdictFilter, setVerdictFilter] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -80,8 +81,12 @@ export default function MissionControl() {
     );
   if (!run || !catalog) return <LoadingScreen />;
 
+  const verdictCounts: Record<string, number> = { DODGE: 0, WATCH: 0, WAIT: 0 };
+  run.events.forEach((e) => (verdictCounts[e.verdict] += 1));
+
   const events = [...run.events]
     .filter((e) => assetFilter === null || e.asset.norad_id === assetFilter)
+    .filter((e) => verdictFilter === null || e.verdict === verdictFilter)
     .sort(
       (a, b) =>
         VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict] ||
@@ -94,10 +99,11 @@ export default function MissionControl() {
       <div className="globe-wrap">
         <FunnelStrip funnel={run.funnel} />
         <div className="legend">
-          <span><i className="dot" style={{ background: "#ff4d4d" }} /> DODGE</span>
-          <span><i className="dot" style={{ background: "#ffb347" }} /> WATCH</span>
-          <span><i className="dot" style={{ background: "#3ddc84" }} /> WAIT</span>
-          <span><i className="dot" style={{ background: "#43d2ff" }} /> your assets</span>
+          <span><i className="sq" style={{ background: "#ff4d4d" }} /> event: dodge</span>
+          <span><i className="sq" style={{ background: "#ffb347" }} /> event: watch</span>
+          <span><i className="sq" style={{ background: "#3ddc84" }} /> event: wait</span>
+          <span><i className="dot" style={{ background: "#4da3ff" }} /> your satellite</span>
+          <span><i className="dot" style={{ background: "#9fb0cc" }} /> other objects</span>
         </div>
         <Globe catalog={catalog} events={run.events} assetIds={run.asset_ids} />
       </div>
@@ -110,6 +116,17 @@ export default function MissionControl() {
           data snapshot {new Date(run.generated_utc).toUTCString().slice(5, 22)} UTC ·
           CelesTrak GP + SATCAT
         </p>
+        <div className="chips">
+          {(["DODGE", "WATCH", "WAIT"] as const).map((v) => (
+            <button
+              key={v}
+              className={`chip vchip ${v} ${verdictFilter === v ? "on" : ""}`}
+              onClick={() => setVerdictFilter(verdictFilter === v ? null : v)}
+            >
+              {v.toLowerCase()} · {verdictCounts[v]}
+            </button>
+          ))}
+        </div>
         {assetNames.size > 1 && (
           <div className="chips">
             <button

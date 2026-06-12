@@ -40,6 +40,34 @@ export interface EncounterSpec {
   missKm: number;
 }
 
+// ---- visual language ----------------------------------------------------
+// BLUE satellite icon = yours · GREY dot = any other tracked object ·
+// RED/AMBER/GREEN diamond = an event (a place+time, which is why it doesn't
+// move). Icons are inline SVG data-URIs: crisp at any zoom, no asset files.
+export const ASSET_BLUE = "#4da3ff";
+const OBJECT_GREY = "#9fb0cc";
+
+const svgUri = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+
+const satIcon = (c: string) =>
+  svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+  <g stroke="#06101f" stroke-width="0.8">
+    <rect x="2"  y="10" width="7" height="10" rx="1.2" fill="${c}" opacity="0.9"/>
+    <rect x="21" y="10" width="7" height="10" rx="1.2" fill="${c}" opacity="0.9"/>
+    <rect x="9.5" y="13.5" width="2" height="3" fill="${c}"/>
+    <rect x="18.5" y="13.5" width="2" height="3" fill="${c}"/>
+    <rect x="11.5" y="9" width="7" height="12" rx="2" fill="${c}"/>
+    <circle cx="15" cy="13" r="1.7" fill="#06101f" opacity="0.55"/>
+  </g></svg>`);
+
+const eventIcon = (c: string) =>
+  svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
+  <g transform="rotate(45 13 13)">
+    <rect x="6" y="6" width="14" height="14" rx="2.5" fill="${c}" fill-opacity="0.22"
+      stroke="${c}" stroke-width="2.6"/>
+    <rect x="10.5" y="10.5" width="5" height="5" rx="1" fill="${c}"/>
+  </g></svg>`);
+
 interface GlobeProps {
   catalog: CatalogEntry[];
   events: Evidence[];
@@ -158,18 +186,17 @@ export default function Globe({
         const verdict = partnerVerdict.get(entry.norad_id);
         const inPair = encounterPair?.has(entry.norad_id) ?? false;
 
-        if (isAsset || verdict || inPair) {
-          // fine sampling for encounter pair so the flyby is glass-smooth
+        if (isAsset || inPair) {
+          // YOUR satellites (blue sat icon) and, in an encounter, the other
+          // object (grey sat icon). These are the only things with orbit
+          // lines by default — a line means "this object matters here".
           const prop = makeSampled(entry, encounter && inPair ? 5 : 20);
           if (!prop) continue;
-          const color = isAsset
-            ? Cesium.Color.fromCssColorString("#43d2ff")
-            : Cesium.Color.fromCssColorString(VERDICT_COLORS[verdict ?? "WATCH"] ?? "#ffb347");
-          // encounter pair gets comet-style glow trails (trail only, so the
-          // direction of motion is unambiguous); mission control keeps the
-          // full lead+trail orbit line, partners shorter than assets
+          const cssColor = isAsset ? ASSET_BLUE : OBJECT_GREY;
+          const color = Cesium.Color.fromCssColorString(cssColor);
           const path = encounter && inPair
             ? new Cesium.PathGraphics({
+                // comet trail: behind only, so direction of motion is obvious
                 leadTime: 0,
                 trailTime: 1500,
                 width: isAsset ? 3.2 : 2.6,
@@ -181,24 +208,29 @@ export default function Globe({
                 }),
               })
             : new Cesium.PathGraphics({
-                leadTime: isAsset ? 2700 : 1200,
-                trailTime: isAsset ? 2700 : 1200,
-                width: isAsset ? 1.8 : 1.2,
+                leadTime: 2700,
+                trailTime: 2700,
+                width: 1.8,
                 // resolution makes orbit lines curve smoothly instead of
                 // looking like chained straight segments (default is 60 s)
                 resolution: 12,
-                material: new Cesium.ColorMaterialProperty(color.withAlpha(isAsset ? 0.7 : 0.45)),
+                material: new Cesium.ColorMaterialProperty(color.withAlpha(0.65)),
               });
           const ent = viewer.entities.add({
             id: `sat-${entry.norad_id}`,
             name: entry.name,
             position: prop,
-            point: { pixelSize: isAsset ? 9 : 7, color, outlineColor: Cesium.Color.BLACK, outlineWidth: 1 },
+            billboard: {
+              image: satIcon(cssColor),
+              width: isAsset ? 30 : 26,
+              height: isAsset ? 30 : 26,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
             label: {
               text: entry.name,
               font: "11px SF Mono, Menlo, monospace",
               fillColor: color,
-              pixelOffset: new Cesium.Cartesian2(10, -10),
+              pixelOffset: new Cesium.Cartesian2(14, -16),
               showBackground: true,
               backgroundColor: Cesium.Color.fromCssColorString("#0b1426").withAlpha(0.7),
             },
@@ -207,21 +239,24 @@ export default function Globe({
           // steady over-the-shoulder camera when this entity is tracked
           ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
         } else {
-          // ambient background: real tracked objects, hover/click to identify
+          // every other tracked object: a grey dot (slightly brighter when it
+          // has an upcoming event with one of your assets). Hover to identify,
+          // click to follow — it gains an orbit line while followed.
           const prop = makeSampled(entry, 120);
           if (!prop) continue;
+          const involved = partnerVerdict.has(entry.norad_id);
           const ent = viewer.entities.add({
             id: `sat-${entry.norad_id}`,
             name: entry.name,
             show: !encounter,
             position: prop,
             point: {
-              pixelSize: 2.2,
-              color: Cesium.Color.fromCssColorString("#7d92bb").withAlpha(0.75),
+              pixelSize: involved ? 3.6 : 2.2,
+              color: Cesium.Color.fromCssColorString(OBJECT_GREY).withAlpha(involved ? 0.95 : 0.55),
             },
           });
           ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
-          ambient.push(ent);
+          if (!involved) ambient.push(ent);
         }
       }
 
@@ -237,22 +272,23 @@ export default function Globe({
         const p = t.positions[0];
         if (!p) continue;
         const showLabel = labelled.has(e.event_id) || Boolean(focusEventId);
+        const vColor = VERDICT_COLORS[e.verdict];
         viewer.entities.add({
           id: `evt-${e.event_id}`,
           name: `${e.verdict}: ${e.asset.name} x ${e.object.name}`,
           position: new Cesium.Cartesian3(p.x, p.y, p.z),
-          point: {
-            pixelSize: showLabel ? 12 : 7,
-            color: Cesium.Color.fromCssColorString(VERDICT_COLORS[e.verdict]).withAlpha(0.25),
-            outlineColor: Cesium.Color.fromCssColorString(VERDICT_COLORS[e.verdict]),
-            outlineWidth: showLabel ? 2 : 1.2,
+          billboard: {
+            image: eventIcon(vColor),
+            width: showLabel ? 24 : 15,
+            height: showLabel ? 24 : 15,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
           label: showLabel
             ? {
                 text: `${e.verdict}${e.simulated ? " (SIM)" : ""} · ${e.miss_distance_km.toFixed(2)} km`,
                 font: "10px SF Mono, Menlo, monospace",
-                fillColor: Cesium.Color.fromCssColorString(VERDICT_COLORS[e.verdict]),
-                pixelOffset: new Cesium.Cartesian2(12, 0),
+                fillColor: Cesium.Color.fromCssColorString(vColor),
+                pixelOffset: new Cesium.Cartesian2(16, 0),
                 showBackground: true,
                 backgroundColor: Cesium.Color.fromCssColorString("#0b1426").withAlpha(0.8),
               }
@@ -331,11 +367,13 @@ export default function Globe({
         const focusEvt = focusEventId
           ? viewer.entities.getById(`evt-${focusEventId}`)
           : null;
-        if (focusEvt?.point) {
-          focusEvt.point.pixelSize = new Cesium.CallbackProperty((time: any) => {
+        if (focusEvt?.billboard) {
+          const pulse = new Cesium.CallbackProperty((time: any) => {
             const dt = Math.abs(Cesium.JulianDate.secondsDifference(tcaJd, time));
-            return dt < 90 ? 14 + 7 * Math.abs(Math.sin(dt / 6)) : 12;
+            return dt < 90 ? 28 + 14 * Math.abs(Math.sin(dt / 6)) : 24;
           }, false);
+          focusEvt.billboard.width = pulse;
+          focusEvt.billboard.height = pulse;
         }
 
         // cinematic camera: frames BOTH objects, zooming as they converge

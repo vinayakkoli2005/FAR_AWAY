@@ -10,7 +10,7 @@ const STEPS = [
   {
     icon: "🌍",
     title: "1 · The sky right now",
-    text: "The globe shows your satellites (cyan, with orbit trails) flying through the full public catalog — every grey dot is a real tracked object on real orbital data. Hover any dot to identify it; click it for its orbit details and a Follow button that locks the camera onto it. Drag to rotate, scroll to zoom, timeline to fast-forward.",
+    text: "Blue satellite icons with orbit lines are YOUR satellites. Every grey dot is another real tracked object — Starlinks, debris, rocket bodies — moving on real orbital data. Colored diamonds are events: a place and time where two objects will pass close (that's why they don't move). Hover anything to identify it; click for details and a Follow button.",
   },
   {
     icon: "🔻",
