@@ -62,6 +62,9 @@ export default function Globe({
   const hoverRef = useRef<HTMLDivElement>(null);
   const sepRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<SelInfo | null>(null);
+  // ambient catalog layer: context in mission control, noise in the
+  // encounter view — so it defaults off there and is always toggleable
+  const [showAmbient, setShowAmbient] = useState(!encounter);
 
   useEffect(() => {
     let destroyed = false;
@@ -145,6 +148,7 @@ export default function Globe({
       const encounterPair = encounter
         ? new Set([encounter.assetId, encounter.objectId])
         : null;
+      const ambient: any[] = [];
 
       for (const entry of catalog) {
         const isAsset = assetSet.has(entry.norad_id);
@@ -153,12 +157,12 @@ export default function Globe({
 
         if (isAsset || verdict || inPair) {
           // fine sampling for encounter pair so the flyby is glass-smooth
-          const prop = makeSampled(entry, encounter && inPair ? 5 : 30);
+          const prop = makeSampled(entry, encounter && inPair ? 5 : 20);
           if (!prop) continue;
           const color = isAsset
             ? Cesium.Color.fromCssColorString("#43d2ff")
             : Cesium.Color.fromCssColorString(VERDICT_COLORS[verdict ?? "WATCH"] ?? "#ffb347");
-          viewer.entities.add({
+          const ent = viewer.entities.add({
             id: `sat-${entry.norad_id}`,
             name: entry.name,
             position: prop,
@@ -172,25 +176,33 @@ export default function Globe({
               backgroundColor: Cesium.Color.fromCssColorString("#0b1426").withAlpha(0.7),
             },
             path: new Cesium.PathGraphics({
-              leadTime: encounter ? 900 : 2700,
-              trailTime: encounter ? 900 : 2700,
+              leadTime: encounter ? 1200 : 2700,
+              trailTime: encounter ? 1200 : 2700,
               width: isAsset ? 1.8 : 1.2,
+              // resolution is what makes orbit lines curve smoothly instead
+              // of looking like chained straight segments (default is 60 s)
+              resolution: encounter ? 5 : 12,
               material: new Cesium.ColorMaterialProperty(color.withAlpha(isAsset ? 0.7 : 0.45)),
             }),
           });
+          // steady over-the-shoulder camera when this entity is tracked
+          ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
         } else {
           // ambient background: real tracked objects, hover/click to identify
           const prop = makeSampled(entry, 120);
           if (!prop) continue;
-          viewer.entities.add({
+          const ent = viewer.entities.add({
             id: `sat-${entry.norad_id}`,
             name: entry.name,
+            show: !encounter,
             position: prop,
             point: {
               pixelSize: 2.2,
               color: Cesium.Color.fromCssColorString("#7d92bb").withAlpha(0.75),
             },
           });
+          ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
+          ambient.push(ent);
         }
       }
 
@@ -326,6 +338,21 @@ export default function Globe({
       };
       window.addEventListener("og-focus", onFocus);
       (viewer as any).__ogFocusListener = onFocus;
+      (viewer as any).__ogAmbient = ambient;
+
+      // following an ambient object: its 120 s samples are fine for a dot but
+      // wobble under a tracking camera — resample at 10 s before locking on
+      (viewer as any).__ogResample = (norad: number) => {
+        const entry = byId.get(norad);
+        const ent = viewer.entities.getById(`sat-${norad}`);
+        if (!entry || !ent || ent.__fine) return ent;
+        const prop = makeSampled(entry, 10);
+        if (prop) {
+          ent.position = prop;
+          ent.__fine = true;
+        }
+        return ent;
+      };
     })();
 
     return () => {
@@ -343,24 +370,33 @@ export default function Globe({
     const viewer = viewerRef.current;
     if (!viewer || !selected) return;
     const Cesium = (window as any).Cesium;
-    const ent = viewer.entities.getById(`sat-${selected.entry.norad_id}`);
-    if (!ent) return;
     if (selected.following) {
       viewer.trackedEntity = undefined;
       setSelected({ ...selected, following: false });
-    } else {
-      // give ambient objects a visible trail while followed
-      if (!ent.path) {
-        ent.path = new Cesium.PathGraphics({
-          leadTime: 2700, trailTime: 2700, width: 1.2,
-          material: new Cesium.ColorMaterialProperty(
-            Cesium.Color.fromCssColorString("#7d92bb").withAlpha(0.6)
-          ),
-        });
-      }
-      viewer.trackedEntity = ent;
-      setSelected({ ...selected, following: true });
+      return;
     }
+    // smooth tracking needs fine position samples + a stable view offset
+    const ent = viewer.__ogResample?.(selected.entry.norad_id)
+      ?? viewer.entities.getById(`sat-${selected.entry.norad_id}`);
+    if (!ent) return;
+    if (!ent.path) {
+      ent.path = new Cesium.PathGraphics({
+        leadTime: 2700, trailTime: 2700, width: 1.4, resolution: 12,
+        material: new Cesium.ColorMaterialProperty(
+          Cesium.Color.fromCssColorString("#9db4dd").withAlpha(0.7)
+        ),
+      });
+    }
+    ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
+    viewer.trackedEntity = ent;
+    setSelected({ ...selected, following: true });
+  };
+
+  const toggleAmbient = () => {
+    const viewer = viewerRef.current;
+    const next = !showAmbient;
+    viewer?.__ogAmbient?.forEach((e: any) => (e.show = next));
+    setShowAmbient(next);
   };
 
   const sel = selected?.entry;
@@ -369,6 +405,13 @@ export default function Globe({
       <div ref={ref} style={{ position: "absolute", inset: 0 }} />
       <div ref={hoverRef} className="hover-tip" />
       {encounter && <div ref={sepRef} className="sep-readout" />}
+      <button
+        className={`layer-toggle tip ${showAmbient ? "on" : ""}`}
+        data-tip="The grey dots are the rest of the tracked catalog — real Starlinks, debris and rocket bodies for situational context. Toggle them off to focus on your assets."
+        onClick={toggleAmbient}
+      >
+        ⬡ catalog {showAmbient ? "ON" : "OFF"}
+      </button>
       {sel && (
         <div className="sat-panel">
           <div className="sat-head">
