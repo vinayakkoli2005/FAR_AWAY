@@ -105,6 +105,19 @@ def radius_m(name: str, object_type: str, rcs_class: str) -> float:
     return DEFAULT_RADIUS_M
 
 
+def _basis(name: str, object_type: str, rcs_class: str) -> str:
+    """How this object's radius was estimated (RCS is withheld for most
+    post-2014 objects, so SATCAT object type is the usual basis)."""
+    for key in NAME_OVERRIDES_M:
+        if key in name.upper():
+            return "known-size"
+    if rcs_class in RCS_RADIUS_M:
+        return f"RCS {rcs_class}"
+    if object_type:
+        return f"SATCAT type {object_type}"
+    return "name-heuristic"
+
+
 def combined_hbr_km(
     asset_name: str, asset_meta: tuple[str, str],
     obj_name: str, obj_meta: tuple[str, str],
@@ -115,7 +128,7 @@ def combined_hbr_km(
     rb = radius_m(obj_name, *obj_meta)
     hbr_m = max(ra + rb, floor_m)
     prov = (
-        f"RCS-derived: {asset_meta[1] or 'heuristic'} ({ra:.1f} m) + "
-        f"{obj_meta[1] or 'heuristic'} ({rb:.1f} m)"
+        f"{_basis(asset_name, *asset_meta)} ({ra:.1f} m) + "
+        f"{_basis(obj_name, *obj_meta)} ({rb:.1f} m)"
     )
     return hbr_m / 1000.0, prov
