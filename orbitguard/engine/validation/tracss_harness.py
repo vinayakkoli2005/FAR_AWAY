@@ -78,15 +78,33 @@ def _convert_one(args: tuple[str, str]) -> tuple[str, dict] | tuple[str, None]:
 
 
 def convert(eph_dir: Path, cache_dir: Path, workers: int = 6) -> None:
-    # "._*" are macOS AppleDouble sidecars on exFAT volumes, not data
-    files = sorted(str(p) for p in eph_dir.rglob("*.ocm") if not p.name.startswith("._"))
-    if not files:
-        raise SystemExit(f"no .ocm files under {eph_dir}")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    log.info("converting %d OCM files with %d workers", len(files), workers)
+    """Incremental: re-runs skip stems already in the index, and files
+    modified < 60 s ago (tar may still be writing them)."""
+    import os
 
+    cache_dir.mkdir(parents=True, exist_ok=True)
     index: dict[str, dict] = {}
     skipped: dict[str, str] = {}
+    if (cache_dir / "index.json").exists():
+        index = json.loads((cache_dir / "index.json").read_text())
+    if (cache_dir / "skipped.json").exists():
+        skipped = json.loads((cache_dir / "skipped.json").read_text())
+    done = set(index) | {Path(p).stem for p in skipped}
+
+    now = time.time()
+    # "._*" are macOS AppleDouble sidecars on exFAT volumes, not data
+    files = sorted(
+        str(p) for p in eph_dir.rglob("*.ocm")
+        if not p.name.startswith("._")
+        and p.stem not in done
+        and now - os.path.getmtime(p) > 60.0
+    )
+    if not files:
+        log.info("convert: nothing new to do (%d already indexed)", len(index))
+        return
+    log.info("converting %d new OCM files with %d workers (%d already indexed)",
+             len(files), workers, len(index))
+
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=workers) as ex:
         for i, (path, meta) in enumerate(
@@ -135,29 +153,65 @@ def _load_slice(cache_dir: Path, index: dict[str, dict],
     return records
 
 
-def run(cache_dir: Path, key_path: Path, out_path: Path,
-        hours: float | None, slice_hours: float) -> dict:
+def run(cache_dir: Path, events_out: Path,
+        start_hours: float, stop_hours: float | None, slice_hours: float,
+        window_hours: float | None = None) -> None:
+    """Screen slices covering [start_hours, stop_hours) and write found events.
+
+    window_hours bounds global TCA validity (defaults to the full 7-day
+    window); separate processes can each take a slice range and run
+    concurrently — half-open slice ownership makes the union exact.
+    """
     index = json.loads((cache_dir / "index.json").read_text())
-    t_max = min(hours * 3600.0, WINDOW_S) if hours else WINDOW_S
+    window_s = min(window_hours * 3600.0, WINDOW_S) if window_hours else WINDOW_S
+    t_stop = min(stop_hours * 3600.0, window_s) if stop_hours else window_s
 
     found = []
     t0 = time.perf_counter()
-    s = 0.0
-    while s < t_max:
-        e = min(s + slice_hours * 3600.0, t_max)
+    s = start_hours * 3600.0
+    while s < t_stop:
+        e = min(s + slice_hours * 3600.0, t_stop)
         margin = 120.0
         records = _load_slice(cache_dir, index, max(s - margin, 0.0), e + margin)
         log.info("slice %.0f-%.0f h: %d ephemerides", s / 3600, e / 3600, len(records))
         events = screen_all_vs_all(
-            records, window_s=t_max, slice_start_s=s, slice_stop_s=e,
+            records, window_s=window_s, slice_start_s=s, slice_stop_s=e,
         )
         found.extend(events)
         log.info("slice done: +%d events (total %d)", len(events), len(found))
         s = e
     runtime_s = time.perf_counter() - t0
 
+    events_out.parent.mkdir(parents=True, exist_ok=True)
+    events_out.write_text(json.dumps({
+        "range_hours": [start_hours, t_stop / 3600.0],
+        "window_hours": window_s / 3600.0,
+        "runtime_s": round(runtime_s, 1),
+        "events": [vars(e) for e in found],
+    }))
+    log.info("%d events -> %s (%.0f s)", len(found), events_out, runtime_s)
+
+
+def score(events_paths: list[Path], key_path: Path, out_path: Path,
+          cache_dir: Path | None = None) -> dict:
+    from engine.validation.matching import KeyEvent
+
+    found: list[KeyEvent] = []
+    runtime_s = 0.0
+    window_hours = None
+    for p in events_paths:
+        blob = json.loads(p.read_text())
+        runtime_s += blob.get("runtime_s", 0.0)
+        window_hours = blob.get("window_hours", window_hours)
+        for e in blob["events"]:
+            found.append(KeyEvent(e["id_a"], e["id_b"], e["tca_s"], e["miss_km"]))
+    t_max = (window_hours or WINDOW_S / 3600.0) * 3600.0
+
     key = load_answer_key(key_path, t_min=0.0, t_max=t_max)
-    report = match_events([e.as_key_event() for e in found], key, tca_tol_s=5.0)
+    report = match_events(found, key, tca_tol_s=5.0)
+    n_eph = 0
+    if cache_dir and (cache_dir / "index.json").exists():
+        n_eph = len(json.loads((cache_dir / "index.json").read_text()))
 
     tca_err = np.array(report.tca_errors_s) if report.tca_errors_s else np.array([0.0])
     miss_err = np.array(report.miss_errors_km) if report.miss_errors_km else np.array([0.0])
@@ -183,7 +237,7 @@ def run(cache_dir: Path, key_path: Path, out_path: Path,
         "miss_rms_m": round(float(np.sqrt(np.mean(miss_err**2))) * 1000.0, 2),
         "miss_p95_m": round(float(np.percentile(np.abs(miss_err), 95)) * 1000.0, 2),
         "runtime_s": round(runtime_s, 1),
-        "n_ephemerides": len(index),
+        "n_ephemerides": n_eph,
         "hardware": "Apple Silicon laptop, 8 GB RAM (time-sliced all-vs-all)",
         "git_sha": sha,
         "methodology": [
@@ -218,23 +272,35 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    pc = sub.add_parser("convert")
+    pc = sub.add_parser("convert", help="parse OCMs into the npy cache")
     pc.add_argument("--eph-dir", required=True, type=Path)
     pc.add_argument("--cache-dir", required=True, type=Path)
     pc.add_argument("--workers", type=int, default=6)
 
-    pr = sub.add_parser("run")
+    pr = sub.add_parser("run", help="screen a slice range, write found events")
     pr.add_argument("--cache-dir", required=True, type=Path)
-    pr.add_argument("--key", required=True, type=Path)
-    pr.add_argument("--out", default=Path("data/scorecard.json"), type=Path)
-    pr.add_argument("--hours", type=float, default=None)
+    pr.add_argument("--events-out", required=True, type=Path)
+    pr.add_argument("--start-hours", type=float, default=0.0)
+    pr.add_argument("--stop-hours", type=float, default=None)
     pr.add_argument("--slice-hours", type=float, default=24.0)
+    pr.add_argument("--window-hours", type=float, default=None,
+                    help="global TCA validity bound (default: full 168 h)")
+
+    ps = sub.add_parser("score", help="merge events files, match key, write scorecard")
+    ps.add_argument("--events", required=True, nargs="+", type=Path)
+    ps.add_argument("--key", required=True, type=Path)
+    ps.add_argument("--out", default=Path("data/scorecard.json"), type=Path)
+    ps.add_argument("--cache-dir", type=Path, default=None)
 
     args = ap.parse_args()
     if args.cmd == "convert":
         convert(args.eph_dir, args.cache_dir, args.workers)
         return 0
-    sc = run(args.cache_dir, args.key, args.out, args.hours, args.slice_hours)
+    if args.cmd == "run":
+        run(args.cache_dir, args.events_out, args.start_hours, args.stop_hours,
+            args.slice_hours, args.window_hours)
+        return 0
+    sc = score(args.events, args.key, args.out, args.cache_dir)
     print(json.dumps({k: sc[k] for k in
                       ("status", "recall", "precision", "f1", "events_key",
                        "events_found", "tca_rms_ms", "miss_rms_m", "runtime_s")},
