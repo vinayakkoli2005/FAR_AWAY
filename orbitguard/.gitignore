@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Data caches (fixtures ARE committed; live caches are not)
+data/cache/
+data/tracss/
+*.parquet
+
+# Secrets
+.env
+
+# Node
+web/node_modules/
+web/.next/
+web/out/
+
+# OS
+.DS_Store
