@@ -142,6 +142,18 @@ def _load_slice(cache_dir: Path, index: dict[str, dict],
         t_slice = np.array(times[lo:hi], dtype=np.float64)
         pos = np.load(cache_dir / f"{stem}.p.npy", mmap_mode="r")
         p_slice = np.array(pos[lo:hi], dtype=np.float64)
+        # Maneuvering ephemerides carry duplicate epochs at burns (pre/post
+        # impulse states at the same instant) and occasional non-monotonic
+        # rows. Keep the LAST state at any repeated epoch — position is
+        # continuous through an impulse, so Lagrange interpolation on the
+        # cleaned series stays valid.
+        for _ in range(4):
+            if len(t_slice) < 2 or np.all(np.diff(t_slice) > 0):
+                break
+            keep = np.concatenate((np.diff(t_slice) > 0, [True]))
+            t_slice, p_slice = t_slice[keep], p_slice[keep]
+        if len(t_slice) < 6 or not np.all(np.diff(t_slice) > 0):
+            continue
         records.append(
             EphRecord(
                 obj_id=meta["obj_id"],
