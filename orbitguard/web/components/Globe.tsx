@@ -65,6 +65,9 @@ export default function Globe({
   // ambient catalog layer: context in mission control, noise in the
   // encounter view — so it defaults off there and is always toggleable
   const [showAmbient, setShowAmbient] = useState(!encounter);
+  const [camMode, setCamMode] = useState<"cine" | "chase" | "free">("cine");
+  const [speed, setSpeed] = useState(25);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     let destroyed = false;
@@ -162,6 +165,30 @@ export default function Globe({
           const color = isAsset
             ? Cesium.Color.fromCssColorString("#43d2ff")
             : Cesium.Color.fromCssColorString(VERDICT_COLORS[verdict ?? "WATCH"] ?? "#ffb347");
+          // encounter pair gets comet-style glow trails (trail only, so the
+          // direction of motion is unambiguous); mission control keeps the
+          // full lead+trail orbit line, partners shorter than assets
+          const path = encounter && inPair
+            ? new Cesium.PathGraphics({
+                leadTime: 0,
+                trailTime: 1500,
+                width: isAsset ? 3.2 : 2.6,
+                resolution: 5,
+                material: new Cesium.PolylineGlowMaterialProperty({
+                  glowPower: 0.22,
+                  taperPower: 0.55,
+                  color: color.withAlpha(0.9),
+                }),
+              })
+            : new Cesium.PathGraphics({
+                leadTime: isAsset ? 2700 : 1200,
+                trailTime: isAsset ? 2700 : 1200,
+                width: isAsset ? 1.8 : 1.2,
+                // resolution makes orbit lines curve smoothly instead of
+                // looking like chained straight segments (default is 60 s)
+                resolution: 12,
+                material: new Cesium.ColorMaterialProperty(color.withAlpha(isAsset ? 0.7 : 0.45)),
+              });
           const ent = viewer.entities.add({
             id: `sat-${entry.norad_id}`,
             name: entry.name,
@@ -175,15 +202,7 @@ export default function Globe({
               showBackground: true,
               backgroundColor: Cesium.Color.fromCssColorString("#0b1426").withAlpha(0.7),
             },
-            path: new Cesium.PathGraphics({
-              leadTime: encounter ? 1200 : 2700,
-              trailTime: encounter ? 1200 : 2700,
-              width: isAsset ? 1.8 : 1.2,
-              // resolution is what makes orbit lines curve smoothly instead
-              // of looking like chained straight segments (default is 60 s)
-              resolution: encounter ? 5 : 12,
-              material: new Cesium.ColorMaterialProperty(color.withAlpha(isAsset ? 0.7 : 0.45)),
-            }),
+            path,
           });
           // steady over-the-shoulder camera when this entity is tracked
           ent.viewFrom = new Cesium.Cartesian3(-180e3, -180e3, 90e3);
@@ -241,30 +260,119 @@ export default function Globe({
         });
       }
 
-      // ---- encounter mode: track the asset and stream the separation ----
+      // ---- encounter mode: cinematic dual-tracking + tether + telemetry ----
       if (encounter && tca) {
         const aEnt = viewer.entities.getById(`sat-${encounter.assetId}`);
         const bEnt = viewer.entities.getById(`sat-${encounter.objectId}`);
-        if (aEnt) {
-          viewer.trackedEntity = aEnt;
-        }
         const tcaJd = Cesium.JulianDate.fromDate(tca);
         const scratchA = new Cesium.Cartesian3();
         const scratchB = new Cesium.Cartesian3();
+        const pairAt = (time: any) => {
+          const pa = aEnt?.position?.getValue(time, scratchA);
+          const pb = bEnt?.position?.getValue(time, scratchB);
+          return pa && pb ? [pa, pb] : null;
+        };
+        const sepColor = (km: number) =>
+          km < 50 ? "#ff4d4d" : km < 500 ? "#ffb347" : "#3ddc84";
+
+        // tether: a dashed line between the two objects, recolored live by
+        // separation — the literal visualization of "how close are they now"
+        if (aEnt && bEnt) {
+          viewer.entities.add({
+            polyline: {
+              positions: new Cesium.CallbackProperty((time: any) => {
+                const p = pairAt(time);
+                return p ? [p[0].clone(), p[1].clone()] : [];
+              }, false),
+              width: 1.8,
+              material: new Cesium.PolylineDashMaterialProperty({
+                dashLength: 14,
+                color: new Cesium.CallbackProperty((time: any) => {
+                  const p = pairAt(time);
+                  if (!p) return Cesium.Color.TRANSPARENT;
+                  const km = Cesium.Cartesian3.distance(p[0], p[1]) / 1000;
+                  return Cesium.Color.fromCssColorString(sepColor(km)).withAlpha(0.85);
+                }, false),
+              }),
+            },
+          });
+          // floating range tag at the midpoint of the tether
+          const PosProp = Cesium.CallbackPositionProperty ?? Cesium.CallbackProperty;
+          viewer.entities.add({
+            position: new PosProp((time: any) => {
+              const p = pairAt(time);
+              return p
+                ? Cesium.Cartesian3.midpoint(p[0], p[1], new Cesium.Cartesian3())
+                : undefined;
+            }, false),
+            label: {
+              text: new Cesium.CallbackProperty((time: any) => {
+                const p = pairAt(time);
+                if (!p) return "";
+                const km = Cesium.Cartesian3.distance(p[0], p[1]) / 1000;
+                return km >= 100 ? `${km.toFixed(0)} km` : `${km.toFixed(2)} km`;
+              }, false),
+              font: "12px SF Mono, Menlo, monospace",
+              fillColor: new Cesium.CallbackProperty((time: any) => {
+                const p = pairAt(time);
+                if (!p) return Cesium.Color.WHITE;
+                const km = Cesium.Cartesian3.distance(p[0], p[1]) / 1000;
+                return Cesium.Color.fromCssColorString(sepColor(km));
+              }, false),
+              showBackground: true,
+              backgroundColor: Cesium.Color.fromCssColorString("#0b1426").withAlpha(0.85),
+              pixelOffset: new Cesium.Cartesian2(0, -16),
+            },
+          });
+        }
+
+        // TCA pulse: the closest-approach marker breathes during the final
+        // and first 90 simulated seconds around the event
+        const focusEvt = focusEventId
+          ? viewer.entities.getById(`evt-${focusEventId}`)
+          : null;
+        if (focusEvt?.point) {
+          focusEvt.point.pixelSize = new Cesium.CallbackProperty((time: any) => {
+            const dt = Math.abs(Cesium.JulianDate.secondsDifference(tcaJd, time));
+            return dt < 90 ? 14 + 7 * Math.abs(Math.sin(dt / 6)) : 12;
+          }, false);
+        }
+
+        // cinematic camera: frames BOTH objects, zooming as they converge
+        let camMode = "cine";
+        let smoothRange = 0;
+        (viewer as any).__setCamMode = (m: string) => {
+          camMode = m;
+          if (m === "chase" && aEnt) {
+            viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+            viewer.trackedEntity = aEnt;
+          } else {
+            viewer.trackedEntity = undefined;
+            if (m === "free") viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+          }
+        };
+        viewer.scene.preRender.addEventListener(() => {
+          if (camMode !== "cine") return;
+          const p = pairAt(viewer.clock.currentTime);
+          if (!p) return;
+          const mid = Cesium.Cartesian3.midpoint(p[0], p[1], new Cesium.Cartesian3());
+          const sep = Cesium.Cartesian3.distance(p[0], p[1]);
+          const target = Math.min(Math.max(sep * 2.4, 90e3), 5.5e6);
+          smoothRange = smoothRange === 0 ? target : smoothRange + (target - smoothRange) * 0.06;
+          viewer.camera.lookAt(mid, new Cesium.HeadingPitchRange(0.45, -0.32, smoothRange));
+        });
+
+        // live telemetry strip
         viewer.clock.onTick.addEventListener((clock: any) => {
           if (!sepRef.current) return;
           const dt = Cesium.JulianDate.secondsDifference(tcaJd, clock.currentTime);
           let sep = "";
-          if (aEnt && bEnt) {
-            const pa = aEnt.position?.getValue(clock.currentTime, scratchA);
-            const pb = bEnt.position?.getValue(clock.currentTime, scratchB);
-            if (pa && pb) {
-              const km = Cesium.Cartesian3.distance(pa, pb) / 1000;
-              const cls = km < 50 ? "#ff4d4d" : km < 500 ? "#ffb347" : "#3ddc84";
-              sep = `<span style="color:${cls}">separation ${
-                km >= 100 ? km.toFixed(0) : km.toFixed(2)
-              } km</span>`;
-            }
+          const p = pairAt(clock.currentTime);
+          if (p) {
+            const km = Cesium.Cartesian3.distance(p[0], p[1]) / 1000;
+            sep = `<span style="color:${sepColor(km)}">separation ${
+              km >= 100 ? km.toFixed(0) : km.toFixed(2)
+            } km</span>`;
           }
           const sign = dt >= 0 ? "T−" : "T+";
           const a = Math.abs(dt);
@@ -399,12 +507,55 @@ export default function Globe({
     setShowAmbient(next);
   };
 
+  const switchCam = (m: "cine" | "chase" | "free") => {
+    viewerRef.current?.__setCamMode?.(m);
+    setCamMode(m);
+  };
+  const setClockSpeed = (x: number) => {
+    if (viewerRef.current) viewerRef.current.clock.multiplier = x;
+    setSpeed(x);
+  };
+  const togglePause = () => {
+    const v = viewerRef.current;
+    if (!v) return;
+    v.clock.shouldAnimate = paused;
+    setPaused(!paused);
+  };
+  const restart = () => {
+    const v = viewerRef.current;
+    if (!v) return;
+    v.clock.currentTime = v.clock.startTime.clone();
+    v.clock.shouldAnimate = true;
+    setPaused(false);
+  };
+
   const sel = selected?.entry;
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <div ref={ref} style={{ position: "absolute", inset: 0 }} />
       <div ref={hoverRef} className="hover-tip" />
       {encounter && <div ref={sepRef} className="sep-readout" />}
+      {encounter && (
+        <div className="enc-controls">
+          <span className="ctl-group">
+            <button className={camMode === "cine" ? "on" : ""} onClick={() => switchCam("cine")}
+              title="Auto-frame both objects, zooming as they converge">🎬 cinematic</button>
+            <button className={camMode === "chase" ? "on" : ""} onClick={() => switchCam("chase")}
+              title="Ride along behind your satellite">🛰 chase</button>
+            <button className={camMode === "free" ? "on" : ""} onClick={() => switchCam("free")}
+              title="Free orbit camera — drag to look around">🖱 free</button>
+          </span>
+          <span className="ctl-group">
+            <button onClick={restart} title="Back to T−15 min">⏮</button>
+            <button onClick={togglePause}>{paused ? "▶" : "⏸"}</button>
+            {[1, 25, 60, 120].map((x) => (
+              <button key={x} className={speed === x ? "on" : ""} onClick={() => setClockSpeed(x)}>
+                {x}×
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
       <button
         className={`layer-toggle tip ${showAmbient ? "on" : ""}`}
         data-tip="The grey dots are the rest of the tracked catalog — real Starlinks, debris and rocket bodies for situational context. Toggle them off to focus on your assets."

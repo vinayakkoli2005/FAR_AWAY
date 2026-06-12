@@ -126,6 +126,21 @@ OMM-first throughout: catalog IDs are integers end-to-end (the 5-digit TLE field
 69999 ≈ July 2026; legacy-TLE pipelines break this summer — ours won't). Our own demo asset
 DRISHTI is NORAD 69010.
 
+## Deploy to Vercel (shareable link, no backend needed)
+
+The physics engine bakes its output into static JSON, so the public site is pure
+Next.js + client-side Cesium — free tier, no Python server:
+
+```bash
+.venv/bin/python -m engine.cli bake     # runs screening + narrations -> web/public/data/
+git add web/public/data && git commit && git push
+```
+
+Then on [vercel.com](https://vercel.com): **Import the GitHub repo → set Root Directory to
+`orbitguard/web` → Deploy.** Static mode switches on automatically (`NEXT_PUBLIC_STATIC=1`
+whenever `VERCEL` is set); the nav's API link becomes a GitHub link. Refresh the data anytime
+by re-running `bake` and pushing.
+
 ## Quickstart
 
 ```bash

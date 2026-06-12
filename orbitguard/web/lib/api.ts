@@ -81,20 +81,63 @@ export interface Explanation {
   model: string | null;
 }
 
+// Static mode: a serverless deployment (Vercel) ships the physics engine's
+// output as frozen JSON under /data — no Python backend required. The bake
+// command (`orbitguard bake`) produces those files.
+export const STATIC_MODE = process.env.NEXT_PUBLIC_STATIC === "1";
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
   return res.json();
 }
 
+async function getStatic<T>(file: string): Promise<T> {
+  const res = await fetch(`/data/${file}`);
+  if (!res.ok) throw new Error(`/data/${file}: ${res.status}`);
+  return res.json();
+}
+
+let conjCache: ConjunctionsResponse | null = null;
+async function staticConjunctions(): Promise<ConjunctionsResponse> {
+  if (!conjCache) conjCache = await getStatic<ConjunctionsResponse>("conjunctions.json");
+  return conjCache;
+}
+
 export const fetchConjunctions = (assets?: string, days = 7) =>
-  get<ConjunctionsResponse>(
-    `/conjunctions?days=${days}${assets ? `&assets=${assets}` : ""}`
-  );
-export const fetchEvent = (id: string) => get<Evidence>(`/conjunction/${id}`);
-export const fetchExplanation = (id: string) => get<Explanation>(`/explain/${id}`);
+  STATIC_MODE
+    ? staticConjunctions()
+    : get<ConjunctionsResponse>(
+        `/conjunctions?days=${days}${assets ? `&assets=${assets}` : ""}`
+      );
+
+export const fetchEvent = async (id: string): Promise<Evidence> => {
+  if (STATIC_MODE) {
+    const c = await staticConjunctions();
+    const ev = c.events.find((e) => e.event_id === id);
+    if (!ev) throw new Error(`unknown event ${id}`);
+    return ev;
+  }
+  return get<Evidence>(`/conjunction/${id}`);
+};
+
+export const fetchExplanation = async (id: string): Promise<Explanation> => {
+  if (STATIC_MODE) {
+    const all = await getStatic<Record<string, Omit<Explanation, "event_id">>>(
+      "explanations.json"
+    );
+    const x = all[id];
+    return { event_id: id, text: x?.text ?? "", source: x?.source ?? "template", model: x?.model ?? null };
+  }
+  return get<Explanation>(`/explain/${id}`);
+};
+
 export const fetchCatalog = (limit = 1200, ids?: string) =>
-  get<CatalogEntry[]>(`/catalog?limit=${limit}${ids ? `&ids=${ids}` : ""}`);
-export const fetchScorecard = () => get<Record<string, unknown>>(`/scorecard`);
-export const fetchAssets = () =>
-  get<{ norad_id: number; name: string }[]>(`/assets`);
+  STATIC_MODE
+    ? getStatic<CatalogEntry[]>("catalog.json")
+    : get<CatalogEntry[]>(`/catalog?limit=${limit}${ids ? `&ids=${ids}` : ""}`);
+
+export const fetchScorecard = () =>
+  STATIC_MODE
+    ? getStatic<Record<string, unknown>>("scorecard.json")
+    : get<Record<string, unknown>>(`/scorecard`);

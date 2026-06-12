@@ -106,6 +106,10 @@ export default function MissionControl() {
           CONJUNCTIONS · NEXT {run.window_days} DAYS · {events.length}
           {assetFilter !== null ? ` / ${run.events.length}` : ""} EVENTS
         </h2>
+        <p className="snapshot-line">
+          data snapshot {new Date(run.generated_utc).toUTCString().slice(5, 22)} UTC ·
+          CelesTrak GP + SATCAT
+        </p>
         {assetNames.size > 1 && (
           <div className="chips">
             <button

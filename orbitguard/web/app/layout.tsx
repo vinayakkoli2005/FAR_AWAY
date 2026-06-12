@@ -28,12 +28,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="navlinks">
             <Link href="/">Mission Control</Link>
             <Link href="/scorecard">Validation Scorecard</Link>
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
-              target="_blank"
-            >
-              API
-            </a>
+            {process.env.NEXT_PUBLIC_STATIC === "1" ? (
+              <a href="https://github.com/vinayakkoli2005/FAR_AWAY" target="_blank">
+                GitHub
+              </a>
+            ) : (
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
+                target="_blank"
+              >
+                API
+              </a>
+            )}
             <GuideModal />
           </div>
         </nav>

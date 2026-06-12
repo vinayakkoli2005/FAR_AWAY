@@ -8,6 +8,10 @@ const nextConfig = {
   },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+    // On Vercel there is no Python backend: the site serves the baked
+    // /public/data snapshot (run `orbitguard bake` before deploying).
+    NEXT_PUBLIC_STATIC:
+      process.env.NEXT_PUBLIC_STATIC || (process.env.VERCEL ? "1" : "0"),
   },
 };
 

@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from engine.config import SETTINGS, FIXTURES_DIR, ScreeningConfig
+from engine.config import SETTINGS, FIXTURES_DIR, PACKAGE_ROOT, ScreeningConfig
 
 
 def cmd_fetch(args) -> int:
@@ -157,6 +157,120 @@ def cmd_screen(args) -> int:
     return 0
 
 
+def cmd_bake(args) -> int:
+    """Freeze a full demo dataset into static JSON for serverless deployment.
+
+    The deployed site (Vercel) is pure static files + client-side Cesium: all
+    physics runs here, once, and the results ship as /data/*.json. Re-run and
+    redeploy to refresh the snapshot.
+    """
+    from datetime import datetime, timezone
+
+    from sgp4 import exporter
+
+    from engine.astro.elements import load_catalog
+    from engine.explain.groq_client import explain
+    from engine.ingest.celestrak import latest_snapshot, load_snapshot
+    from engine.ingest.satcat import combined_hbr_km, load_size_map
+    from engine.risk.evidence import build_evidence
+    from engine.risk.policy import assess_event
+    from engine.risk.simulate import simulated_dodge_event
+    from engine.screening.pipeline import screen_assets
+
+    snap = latest_snapshot("active")
+    if snap is None:
+        snap = FIXTURES_DIR / "gp_active_subset.json"
+    records = load_snapshot(snap)
+    catalog, _ = load_catalog(records)
+    by_id = {o.norad_id: o for o in catalog}
+    asset_ids = [int(x) for x in args.assets.split(",") if int(x) in by_id]
+    assets = [by_id[i] for i in asset_ids]
+    size_map = load_size_map()
+
+    cfg = ScreeningConfig(window_days=args.days)
+    run = screen_assets(assets, catalog, cfg=cfg)
+
+    events = []
+    sim = simulated_dodge_event(assets[0], cfg) if assets else None
+    if sim is not None:
+        events.append(sim)
+    for e in run.events:
+        asset, obj = by_id[e.asset_id], by_id[e.object_id]
+        hbr_km, hbr_src = combined_hbr_km(
+            asset.name, size_map.get(e.asset_id, ("", "")),
+            obj.name, size_map.get(e.object_id, ("", "")),
+        )
+        a = assess_event(e, hbr_km=hbr_km)
+        events.append(build_evidence(e, a, asset, obj, cfg, hbr_source=hbr_src))
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    conjunctions = {
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "source": f"CelesTrak GP snapshot {snap.name}",
+        "window_days": cfg.window_days,
+        "asset_ids": asset_ids,
+        "funnel": run.funnel.as_dict(),
+        "events": events,
+    }
+    with open(out / "conjunctions.json", "w") as f:
+        json.dump(conjunctions, f)
+
+    # explanations: Groq for the top events (budget discipline), template rest
+    def rank(ev):
+        return -(ev["probability"]["pc"] or ev["probability"]["pc_max"] or 0.0)
+
+    explanations = {}
+    for i, ev in enumerate(sorted(events, key=rank)):
+        if i >= args.explain_top:
+            from engine.explain.templates import render_explanation
+
+            explanations[ev["event_id"]] = {
+                "text": render_explanation(ev), "source": "template", "model": None,
+            }
+        else:
+            exp = explain(ev)
+            explanations[ev["event_id"]] = {
+                "text": exp.text, "source": exp.source, "model": exp.model,
+            }
+    with open(out / "explanations.json", "w") as f:
+        json.dump(explanations, f)
+
+    # catalog slice for the globe: assets + partners forced, sampled background
+    forced = set(asset_ids) | {ev["object"]["norad_id"] for ev in events}
+    picked = [by_id[i] for i in forced if i in by_id]
+    stride = max(len(catalog) // max(args.catalog_size - len(picked), 1), 1)
+    for o in catalog[::stride]:
+        if len(picked) >= args.catalog_size:
+            break
+        if o.norad_id not in forced:
+            picked.append(o)
+    cat_out = []
+    for o in picked:
+        try:
+            l1, l2 = exporter.export_tle(o.satrec)
+            tle = [l1, l2]
+        except Exception:
+            tle = None
+        cat_out.append({
+            "norad_id": o.norad_id, "name": o.name, "object_type": o.object_type,
+            "perigee_km": round(o.perigee_km, 1), "apogee_km": round(o.apogee_km, 1),
+            "inclination_deg": o.inclination_deg, "epoch_utc": o.epoch.isoformat(),
+            "omm": {}, "tle": tle,
+        })
+    with open(out / "catalog.json", "w") as f:
+        json.dump(cat_out, f)
+
+    sc_path = PACKAGE_ROOT / "data" / "scorecard.json"
+    if sc_path.exists():
+        (out / "scorecard.json").write_text(sc_path.read_text())
+
+    n_groq = sum(1 for v in explanations.values() if v["source"] == "groq")
+    print(f"baked {len(events)} events ({n_groq} groq-narrated), "
+          f"{len(cat_out)} catalog objects -> {out}")
+    return 0
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
     p = argparse.ArgumentParser(prog="orbitguard")
@@ -184,6 +298,14 @@ def main() -> int:
     ps.add_argument("--explain", action="store_true")
     ps.add_argument("--explain-top", type=int, default=5)
     ps.set_defaults(fn=cmd_screen)
+
+    pb = sub.add_parser("bake", help="freeze a static demo dataset for serverless deploy")
+    pb.add_argument("--assets", default="25544,62701,69010,60454")
+    pb.add_argument("--days", type=float, default=SETTINGS.screening.window_days)
+    pb.add_argument("--out", default=str(PACKAGE_ROOT / "web" / "public" / "data"))
+    pb.add_argument("--catalog-size", type=int, default=1200)
+    pb.add_argument("--explain-top", type=int, default=40)
+    pb.set_defaults(fn=cmd_bake)
 
     args = p.parse_args()
     return args.fn(args)
