@@ -89,8 +89,33 @@ export default function Inspector({ params }: { params: { id: string } }) {
         </section>
 
         <section className="panel">
+          <div className={`verdict-banner ${ev.verdict}`}>
+            <b>{ev.verdict}</b> —{" "}
+            {ev.verdict === "DODGE"
+              ? "collision probability is above NASA's maneuver-consideration threshold."
+              : ev.verdict === "WAIT"
+              ? "provably safe: no error model consistent with this geometry exceeds the concern threshold."
+              : ev.escalate
+              ? "risk cannot be ruled out at this distance, but TLE data can never justify a maneuver — request covariance-grade data (CDM)."
+              : "inconclusive at current data quality — re-screen when fresh orbit data arrives."}
+          </div>
           <h3>ENCOUNTER PLANE</h3>
           <EncounterPlane ev={ev} />
+          <details className="howto">
+            <summary>How to read this figure</summary>
+            <p>
+              You are looking along the relative velocity vector — the plane in which the two
+              objects actually pass each other. The <b style={{ color: "#ffb347" }}>amber dot</b>{" "}
+              is the other object; the <b style={{ color: "#43d2ff" }}>cyan arrow</b> is the miss
+              vector to your satellite at closest approach. The small{" "}
+              <b style={{ color: "#ff4d4d" }}>red circle</b> is the combined hard-body size —
+              physical contact means being inside it. The dashed circles show the{" "}
+              <i>worst-case</i> position-error distribution: the one an adversarial universe
+              would pick to maximize collision probability. Even under that distribution, Pc
+              cannot exceed the bound shown — that is what lets OrbitGuard prove safety from
+              public data alone.
+            </p>
+          </details>
           <h3 style={{ marginTop: 18 }}>EVIDENCE</h3>
           <div className="evidence-grid">
             {rows.map(([k, v]) => (

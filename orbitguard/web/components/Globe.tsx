@@ -203,11 +203,25 @@ export default function Globe({ catalog, events, assetIds, focusEventId }: Globe
         const range = focusEventId ? 2.0e6 : 1.1e7;
         viewer.flyTo(focus, { offset: new Cesium.HeadingPitchRange(0, -0.7, range) });
       }
+
+      // "locate" buttons on event cards fly the camera to that encounter
+      const onFocus = (e: Event) => {
+        const id = (e as CustomEvent).detail as string;
+        const ent = viewer.entities.getById(`evt-${id}`);
+        if (ent) {
+          viewer.flyTo(ent, { offset: new Cesium.HeadingPitchRange(0, -0.6, 2.5e6) });
+        }
+      };
+      window.addEventListener("og-focus", onFocus);
+      (viewer as any).__ogFocusListener = onFocus;
     })();
 
     return () => {
       destroyed = true;
-      const v = viewerRef.current as { destroy?: () => void } | null;
+      const v = viewerRef.current as any;
+      if (v?.__ogFocusListener) {
+        window.removeEventListener("og-focus", v.__ogFocusListener);
+      }
       v?.destroy?.();
       viewerRef.current = null;
     };

@@ -67,11 +67,11 @@ export default function ScorecardPage() {
       )}
 
       <div className="tiles">
-        <div className="tile big-tile">
+        <div className="tile big-tile tip" data-tip="Of all close approaches in the federal answer key, the share our engine found">
           <div className="big">{pending ? "—" : `${((sc.recall ?? 0) * 100).toFixed(2)}%`}</div>
           <div className="lbl">RECALL vs ANSWER KEY</div>
         </div>
-        <div className="tile big-tile">
+        <div className="tile big-tile tip" data-tip="Of all events our engine reported, the share confirmed by the answer key">
           <div className="big">{pending ? "—" : `${((sc.precision ?? 0) * 100).toFixed(2)}%`}</div>
           <div className="lbl">PRECISION</div>
         </div>
