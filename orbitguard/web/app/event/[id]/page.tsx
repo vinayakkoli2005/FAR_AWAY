@@ -61,6 +61,7 @@ export default function Inspector({ params }: { params: { id: string } }) {
     [ev.probability.pc != null ? "Pc" : "Pc (worst-case bound)", pc?.toExponential(3) ?? "—"],
     ["Method", ev.probability.method],
     ["Hard-body radius", `${ev.probability.hard_body_radius_m.toFixed(0)} m`],
+    ["HBR source", ev.probability.hbr_source ?? "default"],
     ["Data grade", ev.data_grade],
     ["Asset GP age", `${ev.asset.gp_age_hours.toFixed(1)} h`],
     ["Object GP age", `${ev.object.gp_age_hours.toFixed(1)} h`],

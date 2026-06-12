@@ -46,6 +46,7 @@ class AppState:
         self.catalog: list[CatalogObject] = []
         self.by_id: dict[int, CatalogObject] = {}
         self.raw_by_id: dict[int, dict] = {}
+        self.size_map: dict[int, tuple[str, str]] = {}  # norad -> (type, rcs class)
         self.runs: dict[str, dict] = {}        # cache key -> response dict
         self.evidence: dict[str, dict] = {}    # event_id -> evidence record
         self.lock = threading.Lock()
@@ -61,7 +62,11 @@ class AppState:
         self.catalog, rejects = load_catalog(self.records)
         self.by_id = {o.norad_id: o for o in self.catalog}
         self.raw_by_id = {int(r["NORAD_CAT_ID"]): r for r in self.records}
-        log.info("loaded %d objects from %s (%d rejects)", len(self.catalog), snap, len(rejects))
+        from engine.ingest.satcat import load_size_map
+
+        self.size_map = load_size_map()  # offline-safe: empty dict -> heuristics
+        log.info("loaded %d objects from %s (%d rejects, %d satcat sizes)",
+                 len(self.catalog), snap, len(rejects), len(self.size_map))
 
 
 STATE = AppState()
@@ -69,7 +74,25 @@ STATE = AppState()
 app = FastAPI(
     title="OrbitGuard API",
     version=__version__,
-    description="Free, explainable, validated conjunction screening for small operators.",
+    description=(
+        "**Free, explainable, validated conjunction screening for small operators.**\n\n"
+        "This is the machine interface behind the OrbitGuard web app — the same data the "
+        "UI renders, available to any script or ground-segment tool. Typical flow:\n\n"
+        "1. `GET /conjunctions` — screen your satellites against the full public catalog "
+        "(7-day window). Returns the screening funnel and one *evidence record* per close "
+        "approach: TCA, miss distance (with radial/in-track/cross-track split), relative "
+        "velocity, collision probability (or worst-case bound), data grade, and the "
+        "DODGE/WAIT/WATCH verdict with its rationale.\n"
+        "2. `GET /conjunction/{event_id}` — one evidence record.\n"
+        "3. `GET /explain/{event_id}` — plain-language narration of that record "
+        "(LLM with a strict no-new-numbers contract, deterministic fallback).\n"
+        "4. `GET /catalog` — orbit data for 3D visualization (OMM + TLE transport).\n"
+        "5. `GET /scorecard` — how this engine scores against the official U.S. TraCSS "
+        "conjunction answer key.\n\n"
+        "Every number is computed by the physics engine; the LLM can only narrate. "
+        "Probabilities on TLE-grade data are worst-case bounds: they can prove safety, "
+        "never justify a maneuver."
+    ),
 )
 app.add_middleware(
     CORSMiddleware,
@@ -119,12 +142,19 @@ def _run_screening(asset_ids: list[int], days: float) -> dict:
     missing = [i for i in asset_ids if i not in STATE.by_id]
     if missing:
         raise HTTPException(404, f"assets not in catalog: {missing}")
+    from engine.ingest.satcat import combined_hbr_km
+
     cfg = ScreeningConfig(window_days=days)
     run = screen_assets([STATE.by_id[i] for i in asset_ids], STATE.catalog, cfg=cfg)
     events = []
     for e in run.events:
-        a = assess_event(e)
-        record = build_evidence(e, a, STATE.by_id[e.asset_id], STATE.by_id[e.object_id], cfg)
+        asset, obj = STATE.by_id[e.asset_id], STATE.by_id[e.object_id]
+        hbr_km, hbr_src = combined_hbr_km(
+            asset.name, STATE.size_map.get(e.asset_id, ("", "")),
+            obj.name, STATE.size_map.get(e.object_id, ("", "")),
+        )
+        a = assess_event(e, hbr_km=hbr_km)
+        record = build_evidence(e, a, asset, obj, cfg, hbr_source=hbr_src)
         STATE.evidence[record["event_id"]] = record
         events.append(record)
     return {

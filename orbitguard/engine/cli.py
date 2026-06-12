@@ -99,11 +99,21 @@ def cmd_screen(args) -> int:
         + (f" | {len(rejects)} records rejected at ingest" if rejects else "")
     )
 
+    from engine.ingest.satcat import combined_hbr_km, load_size_map
+
+    size_map = load_size_map()
     evidence_records = []
-    hbr_km = args.hbr_m / 1000.0
     for e in run.events:
+        asset, obj = by_id[e.asset_id], by_id[e.object_id]
+        if args.hbr_m is not None:
+            hbr_km, hbr_src = args.hbr_m / 1000.0, f"manual ({args.hbr_m:.0f} m)"
+        else:
+            hbr_km, hbr_src = combined_hbr_km(
+                asset.name, size_map.get(e.asset_id, ("", "")),
+                obj.name, size_map.get(e.object_id, ("", "")),
+            )
         a = assess_event(e, hbr_km=hbr_km)
-        record = build_evidence(e, a, by_id[e.asset_id], by_id[e.object_id], cfg)
+        record = build_evidence(e, a, asset, obj, cfg, hbr_source=hbr_src)
         evidence_records.append(record)
 
     if not evidence_records:
@@ -168,7 +178,8 @@ def main() -> int:
     ps.add_argument("--assets", required=True, help="comma-separated NORAD IDs")
     ps.add_argument("--days", type=float, default=SETTINGS.screening.window_days)
     ps.add_argument("--snapshot", default=None)
-    ps.add_argument("--hbr-m", type=float, default=SETTINGS.risk.default_hbr_m)
+    ps.add_argument("--hbr-m", type=float, default=None,
+                    help="override combined hard-body radius (default: per-object RCS sizes)")
     ps.add_argument("--json", default=None)
     ps.add_argument("--explain", action="store_true")
     ps.add_argument("--explain-top", type=int, default=5)

@@ -14,6 +14,7 @@ export interface Probability {
   method: string;
   chan_crosscheck: number | null;
   hard_body_radius_m: number;
+  hbr_source?: string;
 }
 
 export interface PartyInfo {

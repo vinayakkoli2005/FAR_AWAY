@@ -24,6 +24,7 @@ def build_evidence(
     asset: CatalogObject,
     obj: CatalogObject,
     cfg: ScreeningConfig,
+    hbr_source: str = "default",
 ) -> dict:
     r, i, c = event.miss_ric_km
     return {
@@ -58,6 +59,7 @@ def build_evidence(
             "method": assessment.pc_method,
             "chan_crosscheck": _sig3(assessment.pc_chan_crosscheck),
             "hard_body_radius_m": round(assessment.hbr_km * 1000.0, 1),
+            "hbr_source": hbr_source,
         },
         "policy": {
             "rationale": assessment.rationale,

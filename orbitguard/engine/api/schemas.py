@@ -28,6 +28,7 @@ class Probability(BaseModel):
     method: str
     chan_crosscheck: float | None = None
     hard_body_radius_m: float
+    hbr_source: str = "default"
 
 
 class PolicyInfo(BaseModel):
