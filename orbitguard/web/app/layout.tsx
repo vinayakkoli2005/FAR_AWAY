@@ -1,0 +1,38 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "OrbitGuard — conjunction screening for small operators",
+  description:
+    "Free, explainable, validated satellite conjunction assessment on public data.",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        {/* Cesium widget styles are served from the copied static assets */}
+        <link rel="stylesheet" href="/cesium/Widgets/widgets.css" />
+      </head>
+      <body>
+        <nav className="topnav">
+          <Link href="/" className="brand">
+            🛰 ORBITGUARD
+          </Link>
+          <div className="navlinks">
+            <Link href="/">Mission Control</Link>
+            <Link href="/scorecard">Validation Scorecard</Link>
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/docs`}
+              target="_blank"
+            >
+              API
+            </a>
+          </div>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
