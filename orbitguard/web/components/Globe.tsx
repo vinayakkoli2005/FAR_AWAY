@@ -93,6 +93,9 @@ export default function Globe({
   // ambient catalog layer: context in mission control, noise in the
   // encounter view — so it defaults off there and is always toggleable
   const [showAmbient, setShowAmbient] = useState(!encounter);
+  // low-risk (WAIT) event markers are hidden by default: they're in the dock,
+  // and 200+ green diamonds on the globe is noise, not information
+  const [showWaitEvents, setShowWaitEvents] = useState(false);
   const [camMode, setCamMode] = useState<"cine" | "chase" | "free">("cine");
   const [speed, setSpeed] = useState(25);
   const [paused, setPaused] = useState(false);
@@ -116,8 +119,8 @@ export default function Globe({
         navigationHelpButton: false,
         infoBox: false,
         selectionIndicator: false,
-        timeline: true,
-        animation: true,
+        timeline: Boolean(encounter),
+        animation: Boolean(encounter),
         shouldAnimate: true,
       });
       viewerRef.current = viewer;
@@ -139,7 +142,7 @@ export default function Globe({
       viewer.clock.currentTime = startJd;
       viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
       viewer.clock.multiplier = tca ? 25 : 30;
-      viewer.timeline.zoomTo(startJd, stopJd);
+      viewer.timeline?.zoomTo(startJd, stopJd);
 
       // top events drive which partners get full animated treatment
       const ranked = [...events].sort(
@@ -147,7 +150,7 @@ export default function Globe({
           (b.probability.pc ?? b.probability.pc_max ?? 0) -
           (a.probability.pc ?? a.probability.pc_max ?? 0)
       );
-      const topEvents = ranked.slice(0, 12);
+      const topEvents = ranked.slice(0, 8);
       const partnerVerdict = new Map<number, string>();
       for (const e of topEvents) {
         const prev = partnerVerdict.get(e.object.norad_id);
@@ -224,7 +227,6 @@ export default function Globe({
               image: satIcon(cssColor),
               width: isAsset ? 30 : 26,
               height: isAsset ? 30 : 26,
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
             label: {
               text: entry.name,
@@ -260,8 +262,11 @@ export default function Globe({
         }
       }
 
-      // conjunction markers at TCA positions; labels only for the top risks
+      // conjunction markers at TCA positions; labels only for the top risks.
+      // Low-risk WAIT diamonds start hidden (the dock lists them) — the globe
+      // shows what needs attention, not everything that exists.
       const labelled = new Set(topEvents.map((e) => e.event_id));
+      const waitMarkers: any[] = [];
       for (const e of events) {
         const entry = byId.get(e.object.norad_id) ?? byId.get(e.asset.norad_id);
         if (!entry?.tle) continue;
@@ -273,15 +278,16 @@ export default function Globe({
         if (!p) continue;
         const showLabel = labelled.has(e.event_id) || Boolean(focusEventId);
         const vColor = VERDICT_COLORS[e.verdict];
-        viewer.entities.add({
+        const lowRisk = e.verdict === "WAIT" && !showLabel;
+        const evEnt = viewer.entities.add({
           id: `evt-${e.event_id}`,
+          show: !lowRisk,
           name: `${e.verdict}: ${e.asset.name} x ${e.object.name}`,
           position: new Cesium.Cartesian3(p.x, p.y, p.z),
           billboard: {
             image: eventIcon(vColor),
-            width: showLabel ? 24 : 15,
-            height: showLabel ? 24 : 15,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            width: showLabel ? 24 : 14,
+            height: showLabel ? 24 : 14,
           },
           label: showLabel
             ? {
@@ -294,6 +300,7 @@ export default function Globe({
               }
             : undefined,
         });
+        if (lowRisk) waitMarkers.push(evEnt);
       }
 
       // ---- encounter mode: cinematic dual-tracking + tether + telemetry ----
@@ -469,7 +476,7 @@ export default function Globe({
         ? viewer.entities.getById(`evt-${focusEventId}`)
         : viewer.entities.getById(`sat-${assetIds[0]}`);
       if (focus && !encounter) {
-        const range = focusEventId ? 2.0e6 : 1.1e7;
+        const range = focusEventId ? 2.0e6 : 2.0e7;
         viewer.flyTo(focus, { offset: new Cesium.HeadingPitchRange(0, -0.7, range) });
       }
 
@@ -485,6 +492,7 @@ export default function Globe({
       window.addEventListener("og-focus", onFocus);
       (viewer as any).__ogFocusListener = onFocus;
       (viewer as any).__ogAmbient = ambient;
+      (viewer as any).__ogWaitMarkers = waitMarkers;
 
       // following an ambient object: its 120 s samples are fine for a dot but
       // wobble under a tracking camera — resample at 10 s before locking on
@@ -545,6 +553,13 @@ export default function Globe({
     setShowAmbient(next);
   };
 
+  const toggleWaitEvents = () => {
+    const viewer = viewerRef.current;
+    const next = !showWaitEvents;
+    viewer?.__ogWaitMarkers?.forEach((e: any) => (e.show = next));
+    setShowWaitEvents(next);
+  };
+
   const switchCam = (m: "cine" | "chase" | "free") => {
     viewerRef.current?.__setCamMode?.(m);
     setCamMode(m);
@@ -594,13 +609,24 @@ export default function Globe({
           </span>
         </div>
       )}
-      <button
-        className={`layer-toggle tip ${showAmbient ? "on" : ""}`}
-        data-tip="The grey dots are the rest of the tracked catalog — real Starlinks, debris and rocket bodies for situational context. Toggle them off to focus on your assets."
-        onClick={toggleAmbient}
-      >
-        ⬡ catalog {showAmbient ? "ON" : "OFF"}
-      </button>
+      <div className="layer-toggles">
+        <button
+          className={`layer-toggle tip ${showAmbient ? "on" : ""}`}
+          data-tip="The grey dots are the rest of the tracked catalog — real Starlinks, debris and rocket bodies for situational context. Toggle them off to focus on your assets."
+          onClick={toggleAmbient}
+        >
+          ⬡ catalog {showAmbient ? "ON" : "OFF"}
+        </button>
+        {!encounter && (
+          <button
+            className={`layer-toggle tip ${showWaitEvents ? "on" : ""}`}
+            data-tip="Provably-safe (WAIT) events are listed in the dock but hidden on the globe by default — toggle to see all of them as green diamonds."
+            onClick={toggleWaitEvents}
+          >
+            ◆ safe events {showWaitEvents ? "ON" : "OFF"}
+          </button>
+        )}
+      </div>
       {sel && (
         <div className="sat-panel">
           <div className="sat-head">
