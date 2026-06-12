@@ -9,6 +9,28 @@
 
 ---
 
+## ─── SPEAKER SPLIT ───────────────────────────────
+#
+#  SPEAKER A  →  0:00 – 1:20  (~80 seconds)
+#               Scenes 1, 2, 3 + first half of Scene 4
+#               Role: The Storyteller — problem, hook, landing page, Mission Control intro
+#
+#  SPEAKER B  →  1:20 – 2:35  (~75 seconds)
+#               Second half of Scene 4 + full Scene 5
+#               Role: The Engineer — funnel deep-dive, algorithm, Encounter Inspector
+#
+#  SPEAKER C  →  2:35 – 4:00  (~85 seconds)
+#               Scenes 6, 7, 8
+#               Role: The Validator — scorecard, proof, architecture, closing statement
+#
+# ─────────────────────────────────────────────────
+
+---
+
+## ════════════════════════════════════════════════
+## SPEAKER A  [0:00 – 1:20]
+## ════════════════════════════════════════════════
+
 ## SCENE 1 — COLD OPEN [0:00 – 0:08]
 **Screen:** Black screen. Then slow zoom-in on the spinning 3D globe.
 Satellites visible as glowing dots — ISS, DRISHTI, EOS-08, FIREFLY-1 orbiting in real-time.
@@ -69,18 +91,26 @@ Full-screen 3D CesiumJS globe with:
 - Color coding: GREEN (safe), AMBER (watch), RED (dodge)
 - Top-right: the Funnel Strip showing screening progress
 
+### [SPEAKER A — 1:00 to 1:20]
 **Narration:**
 "This is Mission Control. Every active satellite on one screen —
 15,697 objects, screened in real time."
 
 *(point at the funnel strip on top)*
 
-"Watch this funnel. OrbitGuard uses a three-stage screening system:
-
+"Watch this funnel. OrbitGuard uses a three-stage screening system.
 Stage one — altitude filter. In milliseconds, 90% of the catalog is eliminated
-because their orbits mathematically cannot cross.
+because their orbits mathematically cannot cross."
 
-Stage two — a spatial sieve with vectorized SGP4 propagation.
+---
+
+## ════════════════════════════════════════════════
+## SPEAKER B  [1:20 – 2:35]
+## ════════════════════════════════════════════════
+
+### [SPEAKER B — 1:20 to 1:45]  ← handoff from Speaker A here
+**Narration:**
+"Stage two — a spatial sieve with vectorized SGP4 propagation.
 This stage has a mathematical guarantee: it cannot miss a real conjunction.
 The detection pad equals worst-case closing speed multiplied by half the time step.
 No event escapes.
@@ -100,6 +130,7 @@ the probability score, and a clear verdict — DODGE, WATCH, or WAIT."
 
 ---
 
+### [SPEAKER B continues — 1:45 to 2:35]
 ## SCENE 5 — ENCOUNTER INSPECTOR PAGE [1:45 – 2:35]
 **Screen:** Click on the top card — DRISHTI conjunction event.
 Encounter Inspector page opens showing:
@@ -136,6 +167,10 @@ rejects any claim not supported by the underlying data.
 The AI cannot hallucinate here. If the data doesn't say it, the AI can't say it."
 
 ---
+
+## ════════════════════════════════════════════════
+## SPEAKER C  [2:35 – 4:00]
+## ════════════════════════════════════════════════
 
 ## SCENE 6 — SCORECARD / VALIDATION PAGE [2:35 – 3:15]
 **Screen:** Navigate to the Scorecard page.
@@ -228,18 +263,27 @@ they deserve the same protection as everyone else."
 
 ---
 
-## ─── FULL TIMELINE SUMMARY ──────────────────────
+## ─── FULL TIMELINE + SPEAKER ASSIGNMENT ─────────
 
-| Time       | Scene                         | Key Message                                          |
-|------------|-------------------------------|------------------------------------------------------|
-| 0:00–0:08  | Cold open — spinning globe    | Visual hook, no words                                |
-| 0:08–0:40  | The Problem                   | CDM email, 99% false alarms, ₹40L tool cost          |
-| 0:40–1:00  | Landing Page                  | OrbitGuard intro, free + NASA-grade                  |
-| 1:00–1:45  | Mission Control (Globe)       | 3-stage funnel, 15,697→7 events, 90 seconds          |
-| 1:45–2:35  | Encounter Inspector           | Encounter-plane plot, Pc math, validated AI           |
-| 2:35–3:15  | Scorecard / Validation        | TraCSS 20GB dataset, honest limits, no self-grading  |
-| 3:15–3:35  | Architecture + GitHub         | Full free stack, green CI, open source               |
-| 3:35–4:00  | Close                         | Who this is for, repo URL, "clear skies for everyone"|
+| Time        | Speaker    | Scene                        | Key Message                                         |
+|-------------|------------|------------------------------|-----------------------------------------------------|
+| 0:00–0:08   | SPEAKER A  | Cold open — spinning globe   | Visual hook, no words                               |
+| 0:08–0:40   | SPEAKER A  | The Problem                  | CDM email, 99% false alarms, ₹40L tool cost         |
+| 0:40–1:00   | SPEAKER A  | Landing Page                 | OrbitGuard intro, free + NASA-grade                 |
+| 1:00–1:20   | SPEAKER A  | Mission Control — Stage 1    | Globe intro, altitude filter explanation            |
+| 1:20–1:45   | SPEAKER B  | Mission Control — Stages 2&3 | SGP4 sieve, Foster Pc, funnel animation, verdict dock|
+| 1:45–2:35   | SPEAKER B  | Encounter Inspector          | Encounter-plane plot, Pc math, validated AI          |
+| 2:35–3:15   | SPEAKER C  | Scorecard / Validation       | TraCSS 20GB dataset, honest limits, no self-grading |
+| 3:15–3:35   | SPEAKER C  | Architecture + GitHub        | Full free stack, green CI, open source              |
+| 3:35–4:00   | SPEAKER C  | Close                        | Who this is for, repo URL, "clear skies for everyone"|
+
+## ─── SPEAKER SUMMARY ────────────────────────────
+
+| Speaker    | Time Slot     | Duration | Role           | Scenes Covered                          |
+|------------|---------------|----------|----------------|-----------------------------------------|
+| SPEAKER A  | 0:00 – 1:20   | ~80 sec  | The Storyteller| Cold open, Problem, Landing, MC intro   |
+| SPEAKER B  | 1:20 – 2:35   | ~75 sec  | The Engineer   | MC deep-dive (algo), Encounter Inspector|
+| SPEAKER C  | 2:35 – 4:00   | ~85 sec  | The Validator  | Scorecard, Architecture, Close          |
 
 ---
 
