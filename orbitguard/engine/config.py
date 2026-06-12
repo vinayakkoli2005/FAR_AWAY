@@ -9,12 +9,15 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # --- Physical constants (WGS-72 values to stay consistent with SGP4) ---
 MU_EARTH = 398600.8  # km^3/s^2 (WGS-72, the gravity model SGP4 GP data is fitted to)
 R_EARTH = 6378.135  # km equatorial radius (WGS-72)
 
 # --- Paths ---
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PACKAGE_ROOT / ".env")  # CLI, API and tests all pick up local secrets
 DATA_DIR = Path(os.environ.get("ORBITGUARD_DATA_DIR", PACKAGE_ROOT / "data"))
 FIXTURES_DIR = DATA_DIR / "fixtures"
 CACHE_DIR = DATA_DIR / "cache"

@@ -12,6 +12,12 @@ from engine.risk.policy import RiskAssessment
 from engine.screening.tca import ConjunctionEvent
 
 
+def _sig3(x: float | None) -> float | None:
+    """Probabilities carry 3 significant figures everywhere downstream —
+    raw float64 precision is noise the UI and the narrator would only echo."""
+    return None if x is None else float(f"{x:.3g}")
+
+
 def build_evidence(
     event: ConjunctionEvent,
     assessment: RiskAssessment,
@@ -47,10 +53,10 @@ def build_evidence(
         },
         "relative_velocity_kms": round(event.vrel_kms, 4),
         "probability": {
-            "pc": assessment.pc,
-            "pc_max": assessment.pc_max,
+            "pc": _sig3(assessment.pc),
+            "pc_max": _sig3(assessment.pc_max),
             "method": assessment.pc_method,
-            "chan_crosscheck": assessment.pc_chan_crosscheck,
+            "chan_crosscheck": _sig3(assessment.pc_chan_crosscheck),
             "hard_body_radius_m": round(assessment.hbr_km * 1000.0, 1),
         },
         "policy": {

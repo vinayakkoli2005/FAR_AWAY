@@ -83,7 +83,8 @@ def test_evidence_template_validator_chain():
     a = assess_event(ev, hbr_km=0.02, cfg=CFG)
     record = build_evidence(ev, a, asset, obj, ScreeningConfig())
     assert record["verdict"] == a.verdict.value
-    assert record["probability"]["pc_max"] == a.pc_max
+    # probabilities are rounded to 3 significant figures at the evidence layer
+    assert record["probability"]["pc_max"] == pytest.approx(a.pc_max, rel=1e-2)
 
     text = render_explanation(record)
     assert "DEBRIS-X" in text and a.verdict.value in text
