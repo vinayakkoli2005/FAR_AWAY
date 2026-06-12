@@ -1,19 +1,23 @@
-name: CI
+name: OrbitGuard CI
 
 on:
   push:
     branches: [main]
+    paths: ["orbitguard/**", ".github/workflows/orbitguard-ci.yml"]
   pull_request:
+    paths: ["orbitguard/**"]
 
 jobs:
   engine:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orbitguard
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-          cache: pip
       - name: Install
         run: pip install -e ".[dev]"
       - name: Tests (golden vectors, sieve property, Pc referees, policy, harness)
@@ -23,14 +27,12 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: web
+        working-directory: orbitguard/web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: web/package-lock.json
       - name: Install
         run: npm ci
       - name: Type-check and build
